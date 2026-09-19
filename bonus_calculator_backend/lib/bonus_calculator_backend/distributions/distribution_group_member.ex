@@ -10,6 +10,11 @@ defmodule BonusCalculatorBackend.Distributions.DistributionGroupMember do
     field :performance_multiplier, :decimal, default: Decimal.new(100)
     field :note, :string
 
+    # Sheet-exact amount overrides for imported historical distributions.
+    # Both null (the default) means the amounts are computed as usual.
+    field :impact_amount, :decimal
+    field :effort_amount, :decimal
+
     belongs_to :distribution_group, BonusCalculatorBackend.Distributions.DistributionGroup
     belongs_to :employee, BonusCalculatorBackend.People.Employee
 
@@ -24,7 +29,9 @@ defmodule BonusCalculatorBackend.Distributions.DistributionGroupMember do
       :employee_name,
       :hours,
       :performance_multiplier,
-      :note
+      :note,
+      :impact_amount,
+      :effort_amount
     ])
     |> validate_required([:distribution_group_id, :employee_id, :employee_name])
     |> foreign_key_constraint(:distribution_group_id)
