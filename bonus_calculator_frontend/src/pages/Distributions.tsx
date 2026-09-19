@@ -32,6 +32,13 @@ export default function Distributions() {
     navigate(`/distributions/${id}`)
   }
 
+  const sorted = [...db.distributions].sort((a, b) => {
+    if (a.plannedDate && b.plannedDate) return b.plannedDate.localeCompare(a.plannedDate)
+    if (a.plannedDate) return -1
+    if (b.plannedDate) return 1
+    return b.createdAt.localeCompare(a.createdAt)
+  })
+
   return (
     <AppShell>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -94,7 +101,7 @@ export default function Distributions() {
             </tr>
           </thead>
           <tbody>
-            {db.distributions.map((d) => (
+            {sorted.map((d) => (
               <tr key={d.id}>
                 <td>
                   <Link to={`/distributions/${d.id}`} className="group block">
