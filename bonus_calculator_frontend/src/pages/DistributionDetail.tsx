@@ -472,7 +472,7 @@ function SpecialBonuses({ dist }: { dist: Distribution }) {
         <Select value={empId} onValueChange={setEmpId}>
           <SelectTrigger className="h-9 w-44"><SelectValue placeholder="Pick employee…" /></SelectTrigger>
           <SelectContent>
-            {db.employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+            {db.employees.filter((e) => !e.archived).map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
             <SelectItem value="custom">Someone else…</SelectItem>
           </SelectContent>
         </Select>

@@ -69,8 +69,8 @@ export default function Shareholders() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Not linked</SelectItem>
-                        {db.employees.map((e) => (
-                          <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                        {db.employees.filter((e) => !e.archived || e.id === sh.employeeId).map((e) => (
+                          <SelectItem key={e.id} value={e.id}>{e.archived ? `${e.name} (archived)` : e.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
