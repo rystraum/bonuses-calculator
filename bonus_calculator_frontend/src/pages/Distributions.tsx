@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ArrowRight, Plus, Trash2 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
 import { useStore } from '@/lib/store'
 import { peso } from '@/lib/model'
 import { AppShell, Money, StatusBadge } from '@/components/chrome'
@@ -10,6 +11,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+
+const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy')
 
 export default function Distributions() {
   const { db, createDistribution, deleteDistribution } = useStore()
@@ -82,6 +85,7 @@ export default function Distributions() {
             <tr>
               <th>Distribution</th>
               <th>Created by</th>
+              <th>Planned</th>
               <th>Status</th>
               <th className="r">Bonus budget</th>
               <th className="r">Dividends</th>
@@ -100,6 +104,16 @@ export default function Distributions() {
                   <span className="mt-0.5 block text-[0.6875rem] text-muted-foreground">Created {d.createdAt}</span>
                 </td>
                 <td className="text-muted-foreground">{d.createdBy?.username ?? '—'}</td>
+                <td>
+                  {d.plannedDate ? fmtDate(d.plannedDate) : <span className="text-muted-foreground">—</span>}
+                  {d.finalizedAt && (
+                    <span className="mt-0.5 block text-[0.6875rem] text-muted-foreground">
+                      {d.status === 'paid_out' && d.paidOutAt
+                        ? `Paid out ${fmtDate(d.paidOutAt)}`
+                        : `Finalized ${fmtDate(d.finalizedAt)}`}
+                    </span>
+                  )}
+                </td>
                 <td><StatusBadge status={d.status} /></td>
                 <td className="r"><Money value={d.bonusBudget} /></td>
                 <td className="r">
@@ -132,7 +146,7 @@ export default function Distributions() {
               </tr>
             ))}
             {db.distributions.length === 0 && (
-              <tr><td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
+              <tr><td colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
             )}
           </tbody>
         </table>
