@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, Fragment, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ArrowRight, Plus, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -38,6 +38,15 @@ export default function Distributions() {
     if (b.plannedDate) return 1
     return b.createdAt.localeCompare(a.createdAt)
   })
+
+  // group by planned-date year, newest year first (sorted is already planned-desc, nulls last)
+  const yearGroups: { year: string; items: typeof sorted }[] = []
+  for (const d of sorted) {
+    const year = d.plannedDate ? d.plannedDate.slice(0, 4) : 'No planned date'
+    const last = yearGroups[yearGroups.length - 1]
+    if (last && last.year === year) last.items.push(d)
+    else yearGroups.push({ year, items: [d] })
+  }
 
   return (
     <AppShell>
@@ -101,7 +110,14 @@ export default function Distributions() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((d) => (
+            {yearGroups.map((g) => (
+              <Fragment key={g.year}>
+                <tr className="bg-muted/50">
+                  <td colSpan={8} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {g.year}
+                  </td>
+                </tr>
+                {g.items.map((d) => (
               <tr key={d.id}>
                 <td>
                   <Link to={`/distributions/${d.id}`} className="group block">
@@ -151,6 +167,8 @@ export default function Distributions() {
                   </div>
                 </td>
               </tr>
+                ))}
+              </Fragment>
             ))}
             {db.distributions.length === 0 && (
               <tr><td colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
