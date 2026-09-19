@@ -77,6 +77,7 @@ defmodule BonusCalculatorBackendWeb.DistributionController do
       effort_weight: distribution.effort_weight,
       impact_weight: distribution.impact_weight,
       rounding_step: distribution.rounding_step,
+      planned_date: distribution.planned_date,
       created_by: user_json(distribution.created_by),
       finalized_by: user_json(distribution.finalized_by),
       paid_out_by: user_json(distribution.paid_out_by),
