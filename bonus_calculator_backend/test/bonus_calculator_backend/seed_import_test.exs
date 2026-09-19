@@ -166,5 +166,24 @@ defmodule BonusCalculatorBackend.SeedImportTest do
     assert {:error, :unsupported_version} = SeedImport.import_payload(%{"version" => 2}, user)
   end
 
+  test "accepts employees as bare names or {name, classification} objects", %{user: user} do
+    payload = %{
+      "version" => 1,
+      "employees" => [
+        "Alice",
+        %{"name" => "Bob", "classification" => "contractual"},
+        %{"name" => "Carol", "classification" => nil}
+      ]
+    }
+
+    assert {:ok, stats} = SeedImport.import_payload(payload, user)
+    assert stats.employees_created == 3
+
+    by_name = Map.new(People.list_employees(), &{&1.name, &1})
+    assert by_name["Alice"].classification == nil
+    assert by_name["Bob"].classification == "contractual"
+    assert by_name["Carol"].classification == nil
+  end
+
   defp by_name(name), do: Repo.get_by!(Distributions.Distribution, name: name)
 end

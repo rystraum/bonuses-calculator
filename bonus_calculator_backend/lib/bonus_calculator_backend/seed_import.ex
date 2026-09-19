@@ -44,8 +44,9 @@ defmodule BonusCalculatorBackend.SeedImport do
       state =
         payload
         |> Map.get("employees", [])
-        |> Enum.reduce(state, fn name, state ->
-          {state, _employee} = find_or_create_employee(state, name)
+        |> Enum.reduce(state, fn spec, state ->
+          {name, classification} = employee_spec(spec)
+          {state, _employee} = find_or_create_employee(state, name, classification)
           state
         end)
 
@@ -246,21 +247,30 @@ defmodule BonusCalculatorBackend.SeedImport do
     end
   end
 
-  defp find_or_create_employee(state, name) do
+  defp find_or_create_employee(state, name, classification \\ nil) do
     case find_employee(state, name) do
       {state, %Employee{} = employee} ->
         {state, employee}
 
       {state, nil} ->
+        attrs =
+          if classification,
+            do: %{name: name, classification: classification},
+            else: %{name: name}
+
         employee =
           %Employee{}
-          |> Employee.changeset(%{name: name})
+          |> Employee.changeset(attrs)
           |> Repo.insert!()
 
         state = state |> put_in([:employees, name], employee) |> bump(:employees_created)
         {state, employee}
     end
   end
+
+  # Employees may be listed as bare names or as {name, classification} objects.
+  defp employee_spec(%{"name" => name} = spec), do: {name, spec["classification"]}
+  defp employee_spec(name) when is_binary(name), do: {name, nil}
 
   defp find_employee(state, nil), do: {state, nil}
 
