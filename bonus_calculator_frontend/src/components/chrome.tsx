@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink, Navigate, useLocation, useNavigate } from 'react-router'
 import {
-  Banknote, Coins, LogOut, UserRound, UsersRound, Wallet,
+  Banknote, Coins, GitCompareArrows, LogOut, Upload, UserRound, UsersRound, Wallet,
 } from 'lucide-react'
 import { peso, type DistributionStatus } from '@/lib/model'
 import { useStore } from '@/lib/store'
@@ -99,8 +99,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 const NAV = [
   { to: '/', label: 'Distributions', icon: Banknote },
+  { to: '/compare', label: 'Compare', icon: GitCompareArrows },
   { to: '/shareholders', label: 'Shareholders', icon: Coins },
   { to: '/employees', label: 'Employees & Groups', icon: UsersRound },
+  { to: '/import', label: 'Import', icon: Upload },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
