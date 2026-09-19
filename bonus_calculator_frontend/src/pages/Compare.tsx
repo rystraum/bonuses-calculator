@@ -35,9 +35,15 @@ export default function Compare() {
   const dists = store.db.distributions
   const [aPick, setAPick] = useState('')
   const [bPick, setBPick] = useState('')
-  // Default: the two most recent distributions (index order is newest first).
-  const aId = aPick || dists[0]?.id || ''
-  const bId = bPick || dists[1]?.id || ''
+  // Default: B = latest by planned date, A = second latest (Δ = B − A). Falls back to index order.
+  const byPlannedDesc = [...dists].sort((x, y) => {
+    if (x.plannedDate && y.plannedDate) return y.plannedDate.localeCompare(x.plannedDate)
+    if (x.plannedDate) return -1
+    if (y.plannedDate) return 1
+    return y.createdAt.localeCompare(x.createdAt)
+  })
+  const aId = aPick || byPlannedDesc[1]?.id || dists[1]?.id || ''
+  const bId = bPick || byPlannedDesc[0]?.id || dists[0]?.id || ''
   const [a, setA] = useState<DistributionResult | null>(null)
   const [b, setB] = useState<DistributionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
