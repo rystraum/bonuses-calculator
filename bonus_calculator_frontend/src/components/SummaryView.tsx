@@ -20,7 +20,7 @@ export default function SummaryView({ dist }: { dist: Distribution }) {
                 <tr><th>Shareholder</th><th className="r">Shares</th><th className="r">Ownership</th><th className="r">Dividend</th></tr>
               </thead>
               <tbody>
-                {r.dividends.map((d) => (
+                {[...r.dividends].sort((a, b) => b.shares - a.shares).map((d) => (
                   <tr key={d.shareholderId}>
                     <td className="font-medium">{d.name}</td>
                     <td className="r num">{d.shares}</td>
