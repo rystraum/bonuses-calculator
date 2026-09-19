@@ -83,20 +83,24 @@ interface ApiShareholder { id: string; name: string; shares: number; employee_id
 interface ApiGroup { id: string; name: string; employees: { id: string; name: string }[] }
 interface ApiDistMember {
   id: string; employee_id: string | null; employee_name: string | null
-  hours: string; performance_multiplier: string
+  hours: string; performance_multiplier: string; note: string | null
 }
 interface ApiDistGroup {
   id: string; employee_group_id: string | null; name: string; allocation_pct: string
+  impact_weight: number | null; effort_weight: number | null
   members: ApiDistMember[]
 }
 interface ApiSpecialBonus {
   id: string; employee_id: string | null; employee_name: string | null
   name: string | null; amount: string; note: string | null
 }
+interface ApiUserRef { id: string; username: string }
 interface ApiDistribution {
   id: string; name: string; description: string | null; status: Distribution['status']
   include_shareholders: boolean; bonus_budget: string; dividends_budget: string
   impact_weight: number; inserted_at: string
+  created_by: ApiUserRef | null; finalized_by: ApiUserRef | null; paid_out_by: ApiUserRef | null
+  finalized_at: string | null; paid_out_at: string | null
   distribution_groups?: ApiDistGroup[]; special_bonuses?: ApiSpecialBonus[]
 }
 interface ApiComputation {
@@ -105,6 +109,7 @@ interface ApiComputation {
   }
   groups: {
     id: string; name: string; allocation_pct: string; group_budget: string
+    impact_weight: number; effort_weight: number
     impact_budget: string; effort_budget: string; peso_per_impact: string; peso_per_hour: string
     members: (ApiDistMember & {
       impact_pct: string; effort_pct: string; impact_amount: string; effort_amount: string; total: string
@@ -129,6 +134,11 @@ function mapDistribution(d: ApiDistribution): Distribution {
     includeShareholders: d.include_shareholders,
     status: d.status,
     createdAt: (d.inserted_at ?? '').slice(0, 10),
+    createdBy: d.created_by ?? null,
+    finalizedBy: d.finalized_by ?? null,
+    finalizedAt: d.finalized_at ?? null,
+    paidOutBy: d.paid_out_by ?? null,
+    paidOutAt: d.paid_out_at ?? null,
     bonusBudget: num(d.bonus_budget),
     dividendBudget: num(d.dividends_budget),
     impactPct: num(d.impact_weight),
@@ -137,12 +147,15 @@ function mapDistribution(d: ApiDistribution): Distribution {
       groupId: g.employee_group_id,
       name: g.name,
       allocationPct: num(g.allocation_pct),
+      impactWeight: g.impact_weight ?? null,
+      effortWeight: g.effort_weight ?? null,
       members: (g.members ?? []).map((m) => ({
         id: m.id,
         employeeId: m.employee_id,
         name: m.employee_name ?? '—',
         hours: num(m.hours),
         multiplier: num(m.performance_multiplier),
+        note: m.note ?? null,
       })),
     })),
     specialBonuses: (d.special_bonuses ?? []).map((b) => ({
@@ -185,11 +198,14 @@ function mapComputation(data: ApiComputation): DistributionResult {
       impactPct: num(m.impact_pct),
       impactAmount: num(m.impact_amount),
       total: num(m.total),
+      note: m.note ?? null,
     }))
     return {
       groupId: g.id,
       name: g.name,
       allocationPct: num(g.allocation_pct),
+      impactWeight: num(g.impact_weight),
+      effortWeight: num(g.effort_weight),
       budget: num(g.group_budget),
       impactBudget: num(g.impact_budget),
       effortBudget: num(g.effort_budget),
@@ -260,6 +276,8 @@ interface StoreCtx {
   login: (username: string, password: string) => Promise<string | null>
   logout: () => void
   refreshDistribution: (id: UUID) => Promise<void>
+  /** Cached if present, otherwise fetched and cached. */
+  getComputation: (id: UUID) => Promise<DistributionResult>
   // admin
   addShareholder: (name: string, shares: number, employeeId: UUID | null) => Promise<string | null>
   updateShareholder: (id: UUID, patch: Partial<{ name: string; shares: number; employeeId: UUID | null }>) => Promise<string | null>
@@ -278,11 +296,29 @@ interface StoreCtx {
   addGroupToDistribution: (distId: UUID, groupId: UUID) => Promise<string | null>
   removeGroupFromDistribution: (distId: UUID, distGroupId: UUID) => Promise<string | null>
   updateDistGroupAllocation: (distId: UUID, distGroupId: UUID, allocationPct: number) => Promise<string | null>
-  updateDistMember: (distId: UUID, memberId: UUID, patch: Partial<{ hours: number; multiplier: number }>) => Promise<string | null>
+  /** Pass nulls to clear back to the distribution-level weights; otherwise both weights, summing to 100. */
+  updateDistGroupWeights: (distId: UUID, distGroupId: UUID, impactWeight: number | null, effortWeight: number | null) => Promise<string | null>
+  updateDistMember: (distId: UUID, memberId: UUID, patch: Partial<{ hours: number; multiplier: number; note: string | null }>) => Promise<string | null>
   addSpecialBonus: (distId: UUID, employeeId: UUID | null, name: string, amount: number, note: string) => Promise<string | null>
   removeSpecialBonus: (distId: UUID, bonusId: UUID) => Promise<string | null>
   finalizeDistribution: (id: UUID) => Promise<string | null>
   markPaidOut: (id: UUID) => Promise<string | null>
+  // seed import
+  seedImportResult: SeedImportResult | null
+  uploadSeedFile: (file: File) => Promise<string | null>
+}
+
+export interface SeedImportResult {
+  employeesCreated: number
+  groupsCreated: number
+  shareholdersCreated: number
+  distributionsCreated: number
+  distributionsSkipped: number
+}
+
+interface ApiSeedImportResult {
+  employees_created: number; groups_created: number; shareholders_created: number
+  distributions_created: number; distributions_skipped: number
 }
 
 const Ctx = createContext<StoreCtx | null>(null)
@@ -295,8 +331,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
   const [computations, setComputations] = useState<Record<UUID, DistributionResult>>({})
   const [sessionUserId, setSessionUserId] = useState<UUID | null>(storedSession?.id ?? null)
+  const [seedImportResult, setSeedImportResult] = useState<SeedImportResult | null>(null)
   const dbRef = useRef(db)
   useEffect(() => { dbRef.current = db }, [db])
+  const computationsRef = useRef(computations)
+  useEffect(() => { computationsRef.current = computations }, [computations])
   const refreshTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const fetchDistFull = useCallback(async (id: UUID) => {
@@ -322,6 +361,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }))
     setComputations((prev) => ({ ...prev, [id]: result }))
   }, [fetchDistFull])
+
+  const getComputation = useCallback(async (id: UUID): Promise<DistributionResult> => {
+    const cached = computationsRef.current[id]
+    if (cached) return cached
+    const comp = await apiFetch<ApiComputation>(`/distributions/${id}/computation`)
+    const result = mapComputation(comp)
+    setComputations((prev) => ({ ...prev, [id]: result }))
+    return result
+  }, [])
 
   const reloadCore = useCallback(async () => {
     const [employees, shareholders, groups] = await Promise.all([
@@ -421,7 +469,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const api = useMemo<StoreCtx>(() => ({
     db, computations, sessionUserId,
-    login, logout, refreshDistribution,
+    login, logout, refreshDistribution, getComputation,
 
     addShareholder: (name, shares, employeeId) =>
       run(() => apiFetch('/shareholders', { method: 'POST', body: { name, shares, employee_id: employeeId } }), reloadCore),
@@ -508,11 +556,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
         () => refreshDistribution(distId),
       ),
+    updateDistGroupWeights: (distId, distGroupId, impactWeight, effortWeight) =>
+      run(
+        () => apiFetch(`/distribution_groups/${distGroupId}`, {
+          method: 'PATCH',
+          body: { impact_weight: impactWeight, effort_weight: effortWeight },
+        }),
+        () => refreshDistribution(distId),
+      ),
     updateDistMember: async (distId, memberId, patch) => {
       try {
         const body: Record<string, unknown> = {}
         if (patch.hours !== undefined) body.hours = patch.hours
         if (patch.multiplier !== undefined) body.performance_multiplier = patch.multiplier
+        if (patch.note !== undefined) body.note = patch.note
         const m = await apiFetch<ApiDistMember>(`/distribution_group_members/${memberId}`, { method: 'PATCH', body })
         // Apply the row optimistically; the computation refetch is debounced.
         setDb((prev) => ({
@@ -524,7 +581,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 ...g,
                 members: g.members.map((mm) =>
                   mm.id === memberId
-                    ? { ...mm, hours: num(m.hours), multiplier: num(m.performance_multiplier) }
+                    ? { ...mm, hours: num(m.hours), multiplier: num(m.performance_multiplier), note: m.note ?? null }
                     : mm),
               })),
             }),
@@ -559,9 +616,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       run(() => apiFetch(`/distributions/${id}/finalize`, { method: 'POST' }), () => refreshDistribution(id)),
     markPaidOut: (id) =>
       run(() => apiFetch(`/distributions/${id}/mark_paid`, { method: 'POST' }), () => refreshDistribution(id)),
+
+    seedImportResult,
+    uploadSeedFile: async (file) => {
+      let payload: unknown
+      try {
+        payload = JSON.parse(await file.text())
+      } catch {
+        return 'That file is not valid JSON.'
+      }
+      try {
+        const data = await apiFetch<ApiSeedImportResult>('/seed_upload', { method: 'POST', body: payload })
+        setSeedImportResult({
+          employeesCreated: num(data.employees_created),
+          groupsCreated: num(data.groups_created),
+          shareholdersCreated: num(data.shareholders_created),
+          distributionsCreated: num(data.distributions_created),
+          distributionsSkipped: num(data.distributions_skipped),
+        })
+        await loadAll()
+        return null
+      } catch (e) {
+        setSeedImportResult(null)
+        return e instanceof Error ? e.message : 'Something went wrong.'
+      }
+    },
   }), [
-    db, computations, sessionUserId, login, logout,
-    refreshDistribution, reloadCore, reloadDistributions, run, scheduleRefresh,
+    db, computations, sessionUserId, login, logout, seedImportResult,
+    refreshDistribution, getComputation, reloadCore, reloadDistributions, loadAll, run, scheduleRefresh,
   ])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
