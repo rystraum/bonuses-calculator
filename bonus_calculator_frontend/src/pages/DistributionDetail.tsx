@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { ArrowLeft, CheckCheck, Lock, Plus, Trash2 } from 'lucide-react'
-import { peso, pct, EMPTY_RESULT, type Distribution } from '@/lib/model'
+import { format } from 'date-fns'
+import { peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { AppShell, Money, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
 import SummaryView from '@/components/SummaryView'
@@ -10,9 +11,12 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+
+const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 
 export default function DistributionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -40,6 +44,15 @@ export default function DistributionDetail() {
               <StatusBadge status={dist.status} />
             </div>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{dist.description}</p>
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+              <span>Created{dist.createdBy ? ` by ${dist.createdBy.username}` : ''} · {dist.createdAt}</span>
+              {dist.finalizedBy && dist.finalizedAt && (
+                <span>Finalized by {dist.finalizedBy.username} · {fmtDateTime(dist.finalizedAt)}</span>
+              )}
+              {dist.paidOutBy && dist.paidOutAt && (
+                <span>Paid out by {dist.paidOutBy.username} · {fmtDateTime(dist.paidOutAt)}</span>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             {dist.status === 'drafted' && <FinalizeButton dist={dist} />}
@@ -74,36 +87,61 @@ export default function DistributionDetail() {
 // ─── finalize ────────────────────────────────────────────────────────────────
 
 function FinalizeButton({ dist }: { dist: Distribution }) {
-  const { finalizeDistribution } = useStore()
-  const memberCount = dist.groups.reduce((s, g) => s + g.members.length, 0)
+  const store = useStore()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const computation = store.computations[dist.id]
+
+  // Pull the freshest snapshot + computation each time the review opens.
+  useEffect(() => {
+    if (open) {
+      setError(null)
+      store.refreshDistribution(dist.id).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when the dialog opens
+  }, [open, dist.id])
+
+  const confirm = async () => {
+    setBusy(true)
+    setError(null)
+    const err = await store.finalizeDistribution(dist.id)
+    setBusy(false)
+    if (err) setError(err)
+    else setOpen(false)
+  }
+
+  const preview: Distribution = { ...dist, result: computation ?? null }
+
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button><Lock className="mr-1.5 h-4 w-4" /> Finalize</Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Finalize “{dist.name}”?</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              <p>Finalizing freezes this distribution into a read-only snapshot. Later changes to employees, groups, or shareholders will not affect it.</p>
-              <div className="num rounded-md border bg-muted/50 p-3 text-sm">
-                <div className="flex justify-between"><span>Bonus budget</span><b>{peso(dist.bonusBudget)}</b></div>
-                {dist.includeShareholders && (
-                  <div className="flex justify-between"><span>Dividend budget</span><b>{peso(dist.dividendBudget)}</b></div>
-                )}
-                <div className="flex justify-between"><span>Groups / members</span><b>{dist.groups.length} / {memberCount}</b></div>
-                <div className="flex justify-between"><span>Special bonuses</span><b>{dist.specialBonuses.length}</b></div>
-              </div>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep editing</AlertDialogCancel>
-          <AlertDialogAction onClick={() => finalizeDistribution(dist.id)}>Finalize</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Review before finalizing</DialogTitle>
+          <DialogDescription>
+            This is exactly what will be locked in for “{dist.name}”. Finalizing freezes it into a read-only snapshot —
+            later changes to employees, groups, or shareholders will not affect it.
+          </DialogDescription>
+        </DialogHeader>
+        {preview.result ? (
+          <SummaryView dist={preview} />
+        ) : (
+          <div className="py-10 text-center text-sm text-muted-foreground">Loading the latest computation…</div>
+        )}
+        <DialogFooter className="items-center gap-3 sm:justify-between">
+          <span className="text-sm text-red-600">{error}</span>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+            <Button onClick={confirm} disabled={busy || !preview.result}>
+              <Lock className="mr-1.5 h-4 w-4" /> Confirm finalize
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -218,6 +256,12 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                       <NumInput value={g.allocationPct} suffix="%"
                         onCommit={(n) => store.updateDistGroupAllocation(dist.id, g.id, n)} />
                     </label>
+                    <GroupWeightInputs
+                      key={`${g.impactWeight ?? ''}-${g.effortWeight ?? ''}`}
+                      distId={dist.id}
+                      group={g}
+                      effective={pg ? { impact: pg.impactWeight, effort: pg.effortWeight } : null}
+                    />
                     {pg && (
                       <span className="num hidden text-xs text-muted-foreground sm:block">
                         {peso(pg.budget)} budget → <b className="text-foreground">{peso(pg.paidOut)}</b> paid
@@ -236,6 +280,7 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                       <th>Employee</th>
                       <th className="r w-32">Hours (effort)</th>
                       <th className="r w-36">Multiplier (impact)</th>
+                      <th className="w-56">Note</th>
                       <th className="r">Effort ₱</th>
                       <th className="r">Impact ₱</th>
                       <th className="r">Subtotal</th>
@@ -255,6 +300,10 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                             <NumInput value={m.multiplier} suffix="%"
                               onCommit={(n) => store.updateDistMember(dist.id, m.id, { multiplier: n })} />
                           </td>
+                          <td>
+                            <NoteInput value={m.note}
+                              onCommit={(note) => store.updateDistMember(dist.id, m.id, { note })} />
+                          </td>
                           <td className="r num text-muted-foreground">{pm ? peso(pm.effortAmount) : '—'}</td>
                           <td className="r num text-muted-foreground">{pm ? peso(pm.impactAmount) : '—'}</td>
                           <td className="r">{pm ? <Money value={pm.total} className="font-semibold" /> : '—'}</td>
@@ -262,7 +311,7 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                       )
                     })}
                     {g.members.length === 0 && (
-                      <tr><td colSpan={6} className="py-6 text-center text-sm text-muted-foreground">This group has no members.</td></tr>
+                      <tr><td colSpan={7} className="py-6 text-center text-sm text-muted-foreground">This group has no members.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -278,6 +327,95 @@ function DraftEditor({ dist }: { dist: Distribution }) {
       </section>
 
       <SpecialBonuses dist={dist} />
+    </div>
+  )
+}
+
+// ─── member note / group weights ─────────────────────────────────────────────
+
+/** Text encoding input: local string state while focused, commits on blur / Enter. */
+function NoteInput({ value, onCommit }: { value: string | null; onCommit: (note: string | null) => void }) {
+  const [text, setText] = useState(value ?? '')
+  const [focused, setFocused] = useState(false)
+  const [lastValue, setLastValue] = useState(value)
+  if (!focused && value !== lastValue) {
+    setLastValue(value)
+    setText(value ?? '')
+  }
+
+  return (
+    <Input
+      className="h-8 min-w-40 text-xs"
+      placeholder="Rating justification"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false)
+        const next = text.trim() || null
+        if (next !== value) onCommit(next)
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+    />
+  )
+}
+
+/** Optional per-group impact/effort weights. Remounted (via key) when the store value changes. */
+function GroupWeightInputs({
+  distId, group, effective,
+}: {
+  distId: string
+  group: DistGroup
+  effective: { impact: number; effort: number } | null
+}) {
+  const { updateDistGroupWeights } = useStore()
+  const [impact, setImpact] = useState(group.impactWeight?.toString() ?? '')
+  const [effort, setEffort] = useState(group.effortWeight?.toString() ?? '')
+  const [error, setError] = useState<string | null>(null)
+
+  const commit = async () => {
+    const i = impact.trim()
+    const e = effort.trim()
+    if (!i && !e) {
+      setError(group.impactWeight === null ? null : await updateDistGroupWeights(distId, group.id, null, null))
+      return
+    }
+    const ni = Number(i)
+    const ne = Number(e)
+    if (!i || !e || !Number.isInteger(ni) || !Number.isInteger(ne)) {
+      setError('Set both weights as whole numbers, or leave both empty to use the distribution default.')
+      return
+    }
+    if (ni + ne !== 100) {
+      setError('Impact + effort must sum to 100.')
+      return
+    }
+    if (ni === group.impactWeight && ne === group.effortWeight) {
+      setError(null)
+      return
+    }
+    setError(await updateDistGroupWeights(distId, group.id, ni, ne))
+  }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <label className="flex items-center gap-1.5 text-xs text-muted-foreground"
+        title="Per-group impact/effort weights — leave empty to use the distribution default">
+        <span className="shrink-0">Weights</span>
+        <input className="cell-input w-12" inputMode="numeric"
+          placeholder={effective ? String(effective.impact) : ''}
+          value={impact} onChange={(e) => setImpact(e.target.value)} onBlur={commit} onKeyDown={onKeyDown} />
+        <span className="shrink-0 text-[0.6875rem]">impact /</span>
+        <input className="cell-input w-12" inputMode="numeric"
+          placeholder={effective ? String(effective.effort) : ''}
+          value={effort} onChange={(e) => setEffort(e.target.value)} onBlur={commit} onKeyDown={onKeyDown} />
+        <span className="shrink-0 text-[0.6875rem]">effort</span>
+      </label>
+      {error && <span className="text-[0.6875rem] text-red-600">{error}</span>}
     </div>
   )
 }
