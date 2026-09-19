@@ -40,6 +40,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupController do
       employee_group_id: group.employee_group_id,
       name: group.name,
       allocation_pct: Decimal.to_string(group.allocation_pct, :normal),
+      impact_weight: group.impact_weight,
+      effort_weight: group.effort_weight,
       members:
         Enum.map(group.members, fn member ->
           %{
@@ -47,7 +49,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupController do
             employee_id: member.employee_id,
             employee_name: member.employee_name,
             hours: Decimal.to_string(member.hours, :normal),
-            performance_multiplier: Decimal.to_string(member.performance_multiplier, :normal)
+            performance_multiplier: Decimal.to_string(member.performance_multiplier, :normal),
+            note: member.note
           }
         end)
     }
