@@ -1,7 +1,7 @@
 defmodule BonusCalculatorBackend.PeopleTest do
   use BonusCalculatorBackend.DataCase, async: true
 
-  alias BonusCalculatorBackend.People
+  alias BonusCalculatorBackend.{Accounts, People}
 
   describe "employees" do
     test "create_employee/1 accepts each valid classification" do
@@ -56,9 +56,37 @@ defmodule BonusCalculatorBackend.PeopleTest do
 
       assert {:ok, employee} = People.update_employee(employee, %{"archived" => true})
       assert %DateTime{} = employee.archived_at
+      assert employee.archived_by_id == nil
+      assert employee.archived_by == nil
 
       assert {:ok, employee} = People.update_employee(employee, %{"archived" => false})
       assert employee.archived_at == nil
+      assert employee.archived_by_id == nil
+    end
+
+    test "update_employee/3 records who archived and clears it on unarchive" do
+      {:ok, user} = Accounts.create_user(%{"username" => "archiver", "password" => "secret123"})
+      {:ok, employee} = People.create_employee(%{"name" => "Emp"})
+
+      assert {:ok, employee} = People.update_employee(employee, %{"archived" => true}, user)
+      assert %DateTime{} = employee.archived_at
+      assert employee.archived_by_id == user.id
+      assert employee.archived_by.username == "archiver"
+
+      assert {:ok, employee} = People.update_employee(employee, %{"archived" => false}, user)
+      assert employee.archived_at == nil
+      assert employee.archived_by_id == nil
+      assert employee.archived_by == nil
+    end
+
+    test "list_employees/0 and get_employee!/1 preload archived_by" do
+      {:ok, user} = Accounts.create_user(%{"username" => "archiver", "password" => "secret123"})
+      {:ok, employee} = People.create_employee(%{"name" => "Emp"})
+      {:ok, _} = People.update_employee(employee, %{"archived" => true}, user)
+
+      listed = People.list_employees() |> Enum.find(&(&1.name == "Emp"))
+      assert listed.archived_by.username == "archiver"
+      assert People.get_employee!(employee.id).archived_by.username == "archiver"
     end
 
     test "update_employee/2 leaves archived_at alone when archived is not given" do

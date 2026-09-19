@@ -13,6 +13,7 @@ defmodule BonusCalculatorBackend.People.Employee do
 
     field :archived, :boolean, virtual: true
 
+    belongs_to :archived_by, BonusCalculatorBackend.Accounts.User
     has_many :shareholders, BonusCalculatorBackend.People.Shareholder
 
     timestamps(type: :utc_datetime)
@@ -25,19 +26,28 @@ defmodule BonusCalculatorBackend.People.Employee do
     |> cast(attrs, [:name, :classification, :archived])
     |> validate_required([:name])
     |> validate_inclusion(:classification, @classifications)
-    |> apply_archived()
   end
 
-  defp apply_archived(changeset) do
+  def archive_changeset(employee, attrs, archived_by) do
+    employee
+    |> changeset(attrs)
+    |> apply_archived(archived_by)
+  end
+
+  defp apply_archived(changeset, archived_by) do
     case get_change(changeset, :archived) do
       nil ->
         changeset
 
       true ->
-        put_change(changeset, :archived_at, DateTime.utc_now() |> DateTime.truncate(:second))
+        changeset
+        |> put_change(:archived_at, DateTime.utc_now() |> DateTime.truncate(:second))
+        |> put_change(:archived_by_id, archived_by && archived_by.id)
 
       false ->
-        put_change(changeset, :archived_at, nil)
+        changeset
+        |> put_change(:archived_at, nil)
+        |> put_change(:archived_by_id, nil)
     end
   end
 end

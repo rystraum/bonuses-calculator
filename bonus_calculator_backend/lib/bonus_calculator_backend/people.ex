@@ -9,10 +9,10 @@ defmodule BonusCalculatorBackend.People do
   alias BonusCalculatorBackend.Repo
 
   def list_employees do
-    Repo.all(from e in Employee, order_by: e.name)
+    Repo.all(from e in Employee, order_by: e.name, preload: :archived_by)
   end
 
-  def get_employee!(id), do: Repo.get!(Employee, id)
+  def get_employee!(id), do: Repo.get!(Employee, id) |> Repo.preload(:archived_by)
 
   def create_employee(attrs) do
     %Employee{}
@@ -20,10 +20,16 @@ defmodule BonusCalculatorBackend.People do
     |> Repo.insert()
   end
 
-  def update_employee(%Employee{} = employee, attrs) do
+  def update_employee(employee, attrs, archived_by \\ nil)
+
+  def update_employee(%Employee{} = employee, attrs, archived_by) do
     employee
-    |> Employee.changeset(attrs)
+    |> Employee.archive_changeset(attrs, archived_by)
     |> Repo.update()
+    |> case do
+      {:ok, employee} -> {:ok, Repo.preload(employee, :archived_by)}
+      other -> other
+    end
   end
 
   def delete_employee(%Employee{} = employee), do: Repo.delete(employee)
