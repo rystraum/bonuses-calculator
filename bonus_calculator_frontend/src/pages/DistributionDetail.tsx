@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { ArrowLeft, CheckCheck, Lock, Plus, Trash2 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { AppShell, Money, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 
 const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
+const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy')
 
 export default function DistributionDetail() {
   const { id } = useParams<{ id: string }>()
@@ -52,6 +53,11 @@ export default function DistributionDetail() {
               {dist.paidOutBy && dist.paidOutAt && (
                 <span>Paid out by {dist.paidOutBy.username} · {fmtDateTime(dist.paidOutAt)}</span>
               )}
+            </div>
+            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+              <span>Planned: {dist.plannedDate ? fmtDate(dist.plannedDate) : '—'}</span>
+              <span>Finalized: {dist.finalizedAt ? fmtDate(dist.finalizedAt) : '—'}</span>
+              <span>Payout: {dist.paidOutAt ? fmtDate(dist.paidOutAt) : '—'}</span>
             </div>
           </div>
           <div className="flex gap-2">
@@ -164,6 +170,12 @@ function DraftEditor({ dist }: { dist: Distribution }) {
             <span className="kicker mb-1.5 block">Total bonus budget</span>
             <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.bonusBudget}
               onCommit={(n) => store.updateDistribution(dist.id, { bonusBudget: n })} />
+          </label>
+          <label className="block">
+            <span className="kicker mb-1.5 block">Planned date</span>
+            <Input type="date" className="h-10 bg-background font-semibold"
+              value={dist.plannedDate ?? ''}
+              onChange={(e) => store.updateDistribution(dist.id, { plannedDate: e.target.value || null })} />
           </label>
           <div>
             <span className="kicker mb-1.5 block">Impact / effort weighting</span>
