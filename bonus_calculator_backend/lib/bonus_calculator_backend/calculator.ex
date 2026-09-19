@@ -22,9 +22,10 @@ defmodule BonusCalculatorBackend.Calculator do
 
   @doc """
   Computes the breakdown for a `Distribution` that must have
-  `distribution_groups` (with `members`) and `special_bonuses` (with
-  `employee`) preloaded. `shareholders` is the full list of shareholders
-  (with `employee` association irrelevant — only `employee_id` is read).
+  `distribution_groups` (with `members`), `special_bonuses` (with `employee`),
+  and `distribution_shareholders` (with `shareholder`) preloaded.
+  `shareholders` is the full list of live shareholders, used only when the
+  distribution has no snapshot rows (i.e. draft preview).
   """
   def compute(%Distribution{} = distribution, shareholders) when is_list(shareholders) do
     groups = Enum.map(distribution.distribution_groups, &compute_group(&1, distribution))
@@ -57,6 +58,8 @@ defmodule BonusCalculatorBackend.Calculator do
   defp compute_group(group, distribution) do
     step = Decimal.new(distribution.rounding_step || 10)
 
+    {impact_weight, effort_weight} = group_weights(group, distribution)
+
     group_budget =
       distribution.bonus_budget
       |> Decimal.mult(group.allocation_pct)
@@ -64,12 +67,12 @@ defmodule BonusCalculatorBackend.Calculator do
 
     impact_budget =
       group_budget
-      |> Decimal.mult(Decimal.new(distribution.impact_weight))
+      |> Decimal.mult(Decimal.new(impact_weight))
       |> Decimal.div(@hundred)
 
     effort_budget =
       group_budget
-      |> Decimal.mult(Decimal.new(distribution.effort_weight))
+      |> Decimal.mult(Decimal.new(effort_weight))
       |> Decimal.div(@hundred)
 
     total_multiplier =
@@ -91,6 +94,7 @@ defmodule BonusCalculatorBackend.Calculator do
           employee_name: member.employee_name,
           hours: dec(member.hours),
           performance_multiplier: dec(member.performance_multiplier),
+          note: member.note,
           impact_pct: pct(member.performance_multiplier, total_multiplier),
           effort_pct: pct(member.hours, total_hours),
           impact_amount: dec(impact_amount),
@@ -103,6 +107,8 @@ defmodule BonusCalculatorBackend.Calculator do
       id: group.id,
       name: group.name,
       allocation_pct: dec(group.allocation_pct),
+      impact_weight: group.impact_weight,
+      effort_weight: group.effort_weight,
       group_budget: dec(group_budget),
       impact_budget: dec(impact_budget),
       effort_budget: dec(effort_budget),
@@ -114,17 +120,28 @@ defmodule BonusCalculatorBackend.Calculator do
     }
   end
 
+  # Per-group weight overrides apply only when BOTH are set; otherwise the
+  # distribution-level weights are used.
+  defp group_weights(group, distribution) do
+    if is_integer(group.impact_weight) and is_integer(group.effort_weight) do
+      {group.impact_weight, group.effort_weight}
+    else
+      {distribution.impact_weight, distribution.effort_weight}
+    end
+  end
+
   defp compute_dividends(%Distribution{include_shareholders: false}, _shareholders), do: nil
 
-  defp compute_dividends(%Distribution{} = distribution, shareholders) do
-    total_shares = Enum.reduce(shareholders, 0, &(&2 + &1.shares))
+  defp compute_dividends(%Distribution{} = distribution, live_shareholders) do
+    rows = dividend_source(distribution, live_shareholders)
+    total_shares = Enum.reduce(rows, 0, &(&2 + &1.shares))
 
     payouts =
-      Enum.map(shareholders, fn shareholder ->
+      Enum.map(rows, fn row ->
         amount =
           if total_shares > 0 do
             distribution.dividends_budget
-            |> Decimal.mult(Decimal.new(shareholder.shares))
+            |> Decimal.mult(Decimal.new(row.shares))
             |> Decimal.div(Decimal.new(total_shares))
             |> Decimal.round(2)
             |> Decimal.normalize()
@@ -133,11 +150,11 @@ defmodule BonusCalculatorBackend.Calculator do
           end
 
         %{
-          shareholder_id: shareholder.id,
-          shareholder_name: shareholder.name,
-          employee_id: shareholder.employee_id,
-          shares: shareholder.shares,
-          pct: pct(Decimal.new(shareholder.shares), Decimal.new(total_shares)),
+          shareholder_id: row.shareholder_id,
+          shareholder_name: row.name,
+          employee_id: row.employee_id,
+          shares: row.shares,
+          pct: pct(Decimal.new(row.shares), Decimal.new(total_shares)),
           amount: dec(amount)
         }
       end)
@@ -147,6 +164,32 @@ defmodule BonusCalculatorBackend.Calculator do
       total_shares: total_shares,
       payouts: payouts
     }
+  end
+
+  # Snapshot rows (written at finalize/import) win over the live shareholders
+  # table so historical dividends are immune to later share-count changes.
+  defp dividend_source(distribution, live_shareholders) do
+    case distribution.distribution_shareholders do
+      rows when is_list(rows) and rows != [] ->
+        Enum.map(rows, fn row ->
+          %{
+            shareholder_id: row.shareholder_id,
+            name: row.name,
+            employee_id: row.shareholder && row.shareholder.employee_id,
+            shares: row.shares
+          }
+        end)
+
+      _ ->
+        Enum.map(live_shareholders, fn shareholder ->
+          %{
+            shareholder_id: shareholder.id,
+            name: shareholder.name,
+            employee_id: shareholder.employee_id,
+            shares: shareholder.shares
+          }
+        end)
+    end
   end
 
   defp special_bonus_json(bonus) do
