@@ -1,0 +1,152 @@
+// ─── Domain model ─────────────────────────────────────────────────────────────
+// UI-facing model. All data comes from the Phoenix API (see lib/store.tsx);
+// decimals arrive as strings and are coerced with `num()` at the boundary.
+
+export type UUID = string
+
+export type DistributionStatus = 'drafted' | 'finalized' | 'paid_out'
+
+export interface User {
+  id: UUID
+  username: string
+  password: string
+  name: string
+}
+
+export interface Shareholder {
+  id: UUID
+  name: string
+  shares: number
+  employeeId: UUID | null
+}
+
+export interface Employee {
+  id: UUID
+  name: string
+}
+
+export interface EmployeeGroup {
+  id: UUID
+  name: string
+  memberIds: UUID[]
+}
+
+export interface DistMember {
+  id: UUID // distribution_group_member row id (PATCH target)
+  employeeId: UUID | null // source employee; null if the employee was deleted
+  name: string // snapshot
+  hours: number
+  multiplier: number // impact, percent — starts at 100
+}
+
+export interface DistGroup {
+  id: UUID // distribution_group row id (PATCH/DELETE target)
+  groupId: UUID | null // source employee group; null if the group was deleted
+  name: string // snapshot
+  allocationPct: number
+  members: DistMember[]
+}
+
+export interface SpecialBonus {
+  id: UUID
+  employeeId: UUID | null
+  name: string // snapshot / free text
+  amount: number
+  note: string
+}
+
+export interface DividendLine {
+  shareholderId: UUID
+  name: string
+  shares: number
+  pct: number
+  amount: number
+}
+
+export interface GroupMemberLine {
+  employeeId: UUID | null
+  name: string
+  hours: number
+  effortPct: number
+  effortAmount: number
+  multiplier: number
+  impactPct: number
+  impactAmount: number
+  total: number
+}
+
+export interface GroupResult {
+  groupId: UUID
+  name: string
+  allocationPct: number
+  budget: number
+  impactBudget: number
+  effortBudget: number
+  perImpactPoint: number
+  perHour: number
+  members: GroupMemberLine[]
+  paidOut: number
+}
+
+export interface PersonPayout {
+  personId: UUID | null
+  name: string
+  bonusEffort: number
+  bonusImpact: number
+  specialBonus: number
+  dividends: number
+  total: number
+  breakdown: { label: string; amount: number }[]
+}
+
+export interface DistributionResult {
+  dividends: DividendLine[]
+  groups: GroupResult[]
+  payouts: PersonPayout[]
+  bonusBudget: number
+  bonusPaidOut: number
+  specialBonusTotal: number
+  dividendBudget: number
+  dividendPaidOut: number
+  grandTotal: number
+  withinTolerance: boolean
+  toleranceDelta: number
+}
+
+export interface Distribution {
+  id: UUID
+  name: string
+  description: string
+  includeShareholders: boolean
+  status: DistributionStatus
+  createdAt: string
+  bonusBudget: number
+  impactPct: number // effort = 100 - impact
+  groups: DistGroup[]
+  dividendBudget: number
+  specialBonuses: SpecialBonus[]
+  result: DistributionResult | null // set for finalized / paid_out distributions
+}
+
+export interface DB {
+  users: User[]
+  shareholders: Shareholder[]
+  employees: Employee[]
+  groups: EmployeeGroup[]
+  distributions: Distribution[]
+}
+
+export const EMPTY_RESULT: DistributionResult = {
+  dividends: [], groups: [], payouts: [],
+  bonusBudget: 0, bonusPaidOut: 0, specialBonusTotal: 0,
+  dividendBudget: 0, dividendPaidOut: 0, grandTotal: 0,
+  withinTolerance: true, toleranceDelta: 0,
+}
+
+export const uid = (): UUID => crypto.randomUUID()
+
+export const peso = (n: number): string =>
+  '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
+export const pct = (n: number): string =>
+  n.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'
