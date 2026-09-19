@@ -41,12 +41,17 @@ export default function Employees() {
 
   const groupsOf = (empId: string) => db.groups.filter((g) => g.memberIds.includes(empId))
 
-  const visibleEmployees = db.employees.filter((e) => {
-    if (statusFilter === 'active' && e.archived) return false
-    if (statusFilter === 'archived' && !e.archived) return false
-    if (classFilter !== 'all' && e.classification !== classFilter) return false
-    return true
-  })
+  const visibleEmployees = db.employees
+    .filter((e) => {
+      if (statusFilter === 'archived' && !e.archived) return false
+      if (classFilter !== 'all' && e.classification !== classFilter) return false
+      return true
+    })
+    // default ("active") view: active employees first, archived still listed (muted) at the bottom
+    .sort((a, b) => {
+      if (statusFilter !== 'active') return 0
+      return Number(a.archived) - Number(b.archived)
+    })
 
   return (
     <AppShell>
