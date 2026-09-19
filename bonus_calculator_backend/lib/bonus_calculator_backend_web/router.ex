@@ -40,5 +40,7 @@ defmodule BonusCalculatorBackendWeb.Router do
 
     post "/distributions/:id/special_bonuses", SpecialBonusController, :create
     delete "/special_bonuses/:id", SpecialBonusController, :delete
+
+    post "/seed_upload", SeedUploadController, :create
   end
 end
