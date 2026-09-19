@@ -81,6 +81,7 @@ export default function Distributions() {
           <thead>
             <tr>
               <th>Distribution</th>
+              <th>Created by</th>
               <th>Status</th>
               <th className="r">Bonus budget</th>
               <th className="r">Dividends</th>
@@ -98,6 +99,7 @@ export default function Distributions() {
                   </Link>
                   <span className="mt-0.5 block text-[0.6875rem] text-muted-foreground">Created {d.createdAt}</span>
                 </td>
+                <td className="text-muted-foreground">{d.createdBy?.username ?? '—'}</td>
                 <td><StatusBadge status={d.status} /></td>
                 <td className="r"><Money value={d.bonusBudget} /></td>
                 <td className="r">
@@ -130,7 +132,7 @@ export default function Distributions() {
               </tr>
             ))}
             {db.distributions.length === 0 && (
-              <tr><td colSpan={6} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
+              <tr><td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
             )}
           </tbody>
         </table>
