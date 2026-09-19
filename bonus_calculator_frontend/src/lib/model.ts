@@ -132,6 +132,7 @@ export interface Distribution {
   includeShareholders: boolean
   status: DistributionStatus
   createdAt: string
+  plannedDate: string | null
   createdBy: { id: UUID; username: string } | null
   finalizedBy: { id: UUID; username: string } | null
   finalizedAt: string | null

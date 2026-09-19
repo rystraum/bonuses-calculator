@@ -104,6 +104,7 @@ interface ApiDistribution {
   id: string; name: string; description: string | null; status: Distribution['status']
   include_shareholders: boolean; bonus_budget: string; dividends_budget: string
   impact_weight: number; inserted_at: string
+  planned_date: string | null
   created_by: ApiUserRef | null; finalized_by: ApiUserRef | null; paid_out_by: ApiUserRef | null
   finalized_at: string | null; paid_out_at: string | null
   distribution_groups?: ApiDistGroup[]; special_bonuses?: ApiSpecialBonus[]
@@ -139,6 +140,7 @@ function mapDistribution(d: ApiDistribution): Distribution {
     includeShareholders: d.include_shareholders,
     status: d.status,
     createdAt: (d.inserted_at ?? '').slice(0, 10),
+    plannedDate: d.planned_date ?? null,
     createdBy: d.created_by ?? null,
     finalizedBy: d.finalized_by ?? null,
     finalizedAt: d.finalized_at ?? null,
@@ -298,7 +300,7 @@ interface StoreCtx {
   toggleGroupMember: (groupId: UUID, employeeId: UUID) => Promise<string | null>
   // distributions
   createDistribution: (name: string, description: string, includeShareholders: boolean) => Promise<UUID | null>
-  updateDistribution: (id: UUID, patch: Partial<Pick<Distribution, 'name' | 'description' | 'bonusBudget' | 'impactPct' | 'dividendBudget'>>) => Promise<string | null>
+  updateDistribution: (id: UUID, patch: Partial<Pick<Distribution, 'name' | 'description' | 'bonusBudget' | 'impactPct' | 'dividendBudget' | 'plannedDate'>>) => Promise<string | null>
   deleteDistribution: (id: UUID) => Promise<string | null>
   addGroupToDistribution: (distId: UUID, groupId: UUID) => Promise<string | null>
   removeGroupFromDistribution: (distId: UUID, distGroupId: UUID) => Promise<string | null>
@@ -542,6 +544,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (patch.description !== undefined) body.description = patch.description
       if (patch.bonusBudget !== undefined) body.bonus_budget = patch.bonusBudget
       if (patch.dividendBudget !== undefined) body.dividends_budget = patch.dividendBudget
+      if (patch.plannedDate !== undefined) body.planned_date = patch.plannedDate
       if (patch.impactPct !== undefined) {
         body.impact_weight = patch.impactPct
         body.effort_weight = 100 - patch.impactPct
