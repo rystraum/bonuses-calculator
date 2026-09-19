@@ -204,7 +204,9 @@ defmodule BonusCalculatorBackend.SeedImport do
         employee_name: employee.name,
         hours: member_spec["hours"] || 0,
         performance_multiplier: member_spec["performance_multiplier"] || 100,
-        note: member_spec["note"]
+        note: member_spec["note"],
+        impact_amount: member_spec["impact_amount"],
+        effort_amount: member_spec["effort_amount"]
       })
       |> Repo.insert!()
 

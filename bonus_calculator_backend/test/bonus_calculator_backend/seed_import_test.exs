@@ -40,7 +40,9 @@ defmodule BonusCalculatorBackend.SeedImportTest do
                   "employee_name" => "Alice",
                   "hours" => 100,
                   "performance_multiplier" => 200,
-                  "note" => "carried the quarter"
+                  "note" => "carried the quarter",
+                  "impact_amount" => "3000.25",
+                  "effort_amount" => "1000.75"
                 },
                 %{"employee_name" => "Bob", "hours" => 100, "performance_multiplier" => 200}
               ]
@@ -87,6 +89,10 @@ defmodule BonusCalculatorBackend.SeedImportTest do
     assert members["Alice"].note == "carried the quarter"
     assert members["Bob"].note == nil
     assert Decimal.eq?(members["Alice"].performance_multiplier, Decimal.new(200))
+    assert Decimal.eq?(members["Alice"].impact_amount, Decimal.new("3000.25"))
+    assert Decimal.eq?(members["Alice"].effort_amount, Decimal.new("1000.75"))
+    assert members["Bob"].impact_amount == nil
+    assert members["Bob"].effort_amount == nil
 
     # Dividend shareholder snapshot rows.
     snapshots = Map.new(distribution.distribution_shareholders, &{&1.name, &1})
@@ -112,6 +118,18 @@ defmodule BonusCalculatorBackend.SeedImportTest do
     assert computed_group.group_budget == "8000.0000"
     assert computed_group.impact_budget == "6000.0000"
     assert computed_group.effort_budget == "2000.0000"
+
+    # Alice's sheet-exact overrides pass through verbatim; Bob is computed.
+    computed_members = Map.new(computed_group.members, &{&1.employee_name, &1})
+    assert computed_members["Alice"].impact_amount == "3000.25"
+    assert computed_members["Alice"].effort_amount == "1000.75"
+    assert Decimal.eq?(Decimal.new(computed_members["Alice"].total), Decimal.new("4001.00"))
+    assert computed_members["Bob"].impact_amount == "3000.0000"
+    assert computed_members["Bob"].effort_amount == "1000.0000"
+
+    # With overrides present, displayed rates derive from the amount sums.
+    assert computed_group.peso_per_impact == "15.00"
+    assert computed_group.peso_per_hour == "10.00"
 
     payouts = Map.new(result.dividends.payouts, &{&1.shareholder_name, &1})
     assert payouts["Alice"].amount == "1000"
