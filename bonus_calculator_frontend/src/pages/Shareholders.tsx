@@ -13,6 +13,7 @@ export default function Shareholders() {
   const [shares, setShares] = useState('')
 
   const totalShares = db.shareholders.reduce((s, sh) => s + sh.shares, 0)
+  const sorted = [...db.shareholders].sort((a, b) => b.shares - a.shares)
   const empName = (id: string | null) => db.employees.find((e) => e.id === id)?.name ?? null
 
   const submit = (e: FormEvent) => {
@@ -47,7 +48,7 @@ export default function Shareholders() {
               </tr>
             </thead>
             <tbody>
-              {db.shareholders.map((sh) => (
+              {sorted.map((sh) => (
                 <tr key={sh.id}>
                   <td>
                     <input className="cell-input !text-left font-medium" defaultValue={sh.name}
