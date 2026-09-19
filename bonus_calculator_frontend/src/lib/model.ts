@@ -37,6 +37,7 @@ export interface DistMember {
   name: string // snapshot
   hours: number
   multiplier: number // impact, percent — starts at 100
+  note: string | null // e.g. rating justification
 }
 
 export interface DistGroup {
@@ -44,6 +45,8 @@ export interface DistGroup {
   groupId: UUID | null // source employee group; null if the group was deleted
   name: string // snapshot
   allocationPct: number
+  impactWeight: number | null // per-group override; null = distribution default
+  effortWeight: number | null
   members: DistMember[]
 }
 
@@ -73,12 +76,15 @@ export interface GroupMemberLine {
   impactPct: number
   impactAmount: number
   total: number
+  note: string | null
 }
 
 export interface GroupResult {
   groupId: UUID
   name: string
   allocationPct: number
+  impactWeight: number // effective weights (group override or distribution default)
+  effortWeight: number
   budget: number
   impactBudget: number
   effortBudget: number
@@ -120,6 +126,11 @@ export interface Distribution {
   includeShareholders: boolean
   status: DistributionStatus
   createdAt: string
+  createdBy: { id: UUID; username: string } | null
+  finalizedBy: { id: UUID; username: string } | null
+  finalizedAt: string | null
+  paidOutBy: { id: UUID; username: string } | null
+  paidOutAt: string | null
   bonusBudget: number
   impactPct: number // effort = 100 - impact
   groups: DistGroup[]
