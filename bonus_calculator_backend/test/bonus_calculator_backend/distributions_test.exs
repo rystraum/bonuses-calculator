@@ -20,6 +20,30 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     %{e1: e1, e2: e2, group: group, distribution: distribution}
   end
 
+  describe "planned_date" do
+    test "create and update round-trip planned_date" do
+      {:ok, dist} =
+        Distributions.create_distribution(%{"name" => "Dated", "planned_date" => "2026-12-15"})
+
+      assert dist.planned_date == ~D[2026-12-15]
+
+      assert {:ok, dist} =
+               Distributions.update_distribution(dist, %{"planned_date" => "2027-01-31"})
+
+      assert dist.planned_date == ~D[2027-01-31]
+
+      assert {:ok, dist} = Distributions.update_distribution(dist, %{"planned_date" => nil})
+      assert dist.planned_date == nil
+    end
+
+    test "planned_date update is blocked after finalize", ctx do
+      {:ok, finalized} = Distributions.finalize_distribution(ctx.distribution)
+
+      assert {:error, :not_drafted} =
+               Distributions.update_distribution(finalized, %{"planned_date" => "2026-12-15"})
+    end
+  end
+
   describe "snapshots" do
     test "adding a group snapshots the name and members", ctx do
       {:ok, dist_group} =

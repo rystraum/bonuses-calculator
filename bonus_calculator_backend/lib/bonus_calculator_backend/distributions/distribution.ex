@@ -16,6 +16,7 @@ defmodule BonusCalculatorBackend.Distributions.Distribution do
     field :effort_weight, :integer, default: 50
     field :impact_weight, :integer, default: 50
     field :rounding_step, :integer, default: 10
+    field :planned_date, :date
     field :finalized_at, :utc_datetime
     field :paid_out_at, :utc_datetime
 
@@ -44,7 +45,8 @@ defmodule BonusCalculatorBackend.Distributions.Distribution do
       :bonus_budget,
       :effort_weight,
       :impact_weight,
-      :rounding_step
+      :rounding_step,
+      :planned_date
     ])
     |> validate_required([:name])
     |> validate_number(:effort_weight, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
