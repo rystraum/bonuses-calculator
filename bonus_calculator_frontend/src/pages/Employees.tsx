@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { Archive, ArchiveRestore, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { useStore } from '@/lib/store'
 import type { EmployeeClassification } from '@/lib/model'
 import { AppShell, SectionHeader } from '@/components/chrome'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
@@ -185,20 +184,53 @@ export default function Employees() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="flex flex-wrap gap-x-5 gap-y-2 px-3 py-2.5">
-                  {db.employees.filter((e) => !e.archived).map((e) => (
-                    <label key={e.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={g.memberIds.includes(e.id)}
-                        onCheckedChange={() => toggleGroupMember(g.id, e.id)}
-                      />
-                      {e.name}
-                    </label>
-                  ))}
-                  {db.employees.filter((e) => !e.archived).length === 0 && (
-                    <span className="text-xs text-muted-foreground">Add employees first.</span>
-                  )}
-                </div>
+                {(() => {
+                  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
+                  const members = g.memberIds
+                    .map((id) => db.employees.find((e) => e.id === id))
+                    .filter((e): e is NonNullable<typeof e> => Boolean(e))
+                    .sort(byName)
+                  const available = db.employees
+                    .filter((e) => !e.archived && !g.memberIds.includes(e.id))
+                    .sort(byName)
+                  return (
+                    <div className="grid grid-cols-2 divide-x">
+                      <div className="px-3 py-2.5">
+                        <p className="kicker mb-2">Added</p>
+                        <div className="space-y-0.5">
+                          {members.map((e) => (
+                            <button key={e.id} type="button" onClick={() => toggleGroupMember(g.id, e.id)}
+                              title="Remove from group"
+                              className="group/member flex w-full items-center justify-between rounded px-1.5 py-1 text-left text-sm hover:bg-destructive/10">
+                              <span className="flex items-center gap-2">
+                                {e.name}
+                                {e.archived && (
+                                  <span className="rounded-full border bg-secondary px-1.5 py-0 text-[0.625rem] font-medium text-muted-foreground">Archived</span>
+                                )}
+                              </span>
+                              <X className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover/member:opacity-100" />
+                            </button>
+                          ))}
+                          {members.length === 0 && <p className="px-1.5 py-1 text-xs text-muted-foreground">No members yet.</p>}
+                        </div>
+                      </div>
+                      <div className="px-3 py-2.5">
+                        <p className="kicker mb-2">Not added</p>
+                        <div className="space-y-0.5">
+                          {available.map((e) => (
+                            <button key={e.id} type="button" onClick={() => toggleGroupMember(g.id, e.id)}
+                              title="Add to group"
+                              className="group/member flex w-full items-center justify-between rounded px-1.5 py-1 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
+                              {e.name}
+                              <Plus className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/member:opacity-100" />
+                            </button>
+                          ))}
+                          {available.length === 0 && <p className="px-1.5 py-1 text-xs text-muted-foreground">Everyone is in.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
             {db.groups.length === 0 && (
