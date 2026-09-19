@@ -196,6 +196,10 @@ defmodule BonusCalculatorBackend.SeedImport do
       })
       |> Repo.insert!()
 
+    # Sheet-exact amount overrides only make sense for locked (finalized /
+    # paid_out) distributions; drafts must compute live from the budget.
+    keep_overrides? = distribution.status != "drafted"
+
     Enum.reduce(spec["members"] || [], state, fn member_spec, state ->
       {state, employee} = find_or_create_employee(state, member_spec["employee_name"])
 
@@ -207,8 +211,8 @@ defmodule BonusCalculatorBackend.SeedImport do
         hours: member_spec["hours"] || 0,
         performance_multiplier: member_spec["performance_multiplier"] || 100,
         note: member_spec["note"],
-        impact_amount: member_spec["impact_amount"],
-        effort_amount: member_spec["effort_amount"]
+        impact_amount: if(keep_overrides?, do: member_spec["impact_amount"]),
+        effort_amount: if(keep_overrides?, do: member_spec["effort_amount"])
       })
       |> Repo.insert!()
 

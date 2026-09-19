@@ -147,6 +147,47 @@ defmodule BonusCalculatorBackend.SeedImportTest do
     assert result.dividends.total_shares == 400
   end
 
+  test "drafted distributions drop sheet-exact amount overrides", %{user: user} do
+    payload =
+      fixture()
+      |> put_in(["distributions"], [
+        %{
+          "name" => "Q2 Draft",
+          "status" => "drafted",
+          "bonus_budget" => 10000,
+          "groups" => [
+            %{
+              "name" => "Engineering",
+              "budget" => 10000,
+              "members" => [
+                %{
+                  "employee_name" => "Alice",
+                  "hours" => 100,
+                  "performance_multiplier" => 100,
+                  "impact_amount" => "3000.25",
+                  "effort_amount" => "1000.75"
+                }
+              ]
+            }
+          ]
+        }
+      ])
+
+    assert {:ok, _} = SeedImport.import_payload(payload, user)
+
+    distribution = Distributions.get_distribution_full!(by_name("Q2 Draft").id)
+    [group] = distribution.distribution_groups
+    [member] = group.members
+    assert member.impact_amount == nil
+    assert member.effort_amount == nil
+
+    # Amounts are computed live from the budget instead of the sheet values.
+    result = Calculator.compute(distribution, People.list_shareholders())
+    [computed_member] = hd(result.groups).members
+    refute computed_member.impact_amount == "3000.25"
+    refute computed_member.effort_amount == "1000.75"
+  end
+
   test "reimporting skips existing distributions and recreates nothing", %{user: user} do
     assert {:ok, _} = SeedImport.import_payload(fixture(), user)
     assert {:ok, stats} = SeedImport.import_payload(fixture(), user)
