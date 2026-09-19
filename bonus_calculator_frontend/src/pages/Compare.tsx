@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { peso, pct, type DistributionResult, type GroupResult } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { AppShell, SectionHeader } from '@/components/chrome'
@@ -33,8 +34,7 @@ function unionKeys<T>(a: T[], b: T[], key: (x: T) => string): string[] {
 export default function Compare() {
   const store = useStore()
   const dists = store.db.distributions
-  const [aPick, setAPick] = useState('')
-  const [bPick, setBPick] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
   // Default: B = latest by planned date, A = second latest (Δ = B − A). Falls back to index order.
   const byPlannedDesc = [...dists].sort((x, y) => {
     if (x.plannedDate && y.plannedDate) return y.plannedDate.localeCompare(x.plannedDate)
@@ -42,8 +42,17 @@ export default function Compare() {
     if (y.plannedDate) return 1
     return y.createdAt.localeCompare(x.createdAt)
   })
-  const aId = aPick || byPlannedDesc[1]?.id || dists[1]?.id || ''
-  const bId = bPick || byPlannedDesc[0]?.id || dists[0]?.id || ''
+  const paramId = (key: string) => {
+    const v = searchParams.get(key)
+    return v && dists.some((d) => d.id === v) ? v : ''
+  }
+  const aId = paramId('a') || byPlannedDesc[1]?.id || dists[1]?.id || ''
+  const bId = paramId('b') || byPlannedDesc[0]?.id || dists[0]?.id || ''
+  const setPick = (key: 'a' | 'b') => (v: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set(key, v)
+    setSearchParams(next, { replace: true })
+  }
   const [a, setA] = useState<DistributionResult | null>(null)
   const [b, setB] = useState<DistributionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -88,8 +97,8 @@ export default function Compare() {
           <p className="mt-1 text-sm text-muted-foreground">Δ is B − A — what changed from the base to the comparison.</p>
         </div>
         <div className="flex flex-wrap gap-4">
-          {picker(aId, setAPick, 'A · base')}
-          {picker(bId, setBPick, 'B · compare')}
+          {picker(aId, setPick('a'), 'A · base')}
+          {picker(bId, setPick('b'), 'B · compare')}
         </div>
       </div>
 
