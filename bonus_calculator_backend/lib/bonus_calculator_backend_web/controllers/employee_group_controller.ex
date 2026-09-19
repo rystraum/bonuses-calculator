@@ -59,8 +59,19 @@ defmodule BonusCalculatorBackendWeb.EmployeeGroupController do
   defp group_json(group) do
     employees =
       case group.employees do
-        %Ecto.Association.NotLoaded{} -> []
-        employees -> Enum.map(employees, &%{id: &1.id, name: &1.name})
+        %Ecto.Association.NotLoaded{} ->
+          []
+
+        employees ->
+          Enum.map(employees, fn e ->
+            %{
+              id: e.id,
+              name: e.name,
+              classification: e.classification,
+              archived: not is_nil(e.archived_at),
+              archived_at: e.archived_at
+            }
+          end)
       end
 
     %{id: group.id, name: group.name, employees: employees}
