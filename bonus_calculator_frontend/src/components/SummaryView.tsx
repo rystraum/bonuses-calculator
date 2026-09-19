@@ -13,7 +13,7 @@ export default function SummaryView({ dist }: { dist: Distribution }) {
       {/* dividends */}
       {dist.includeShareholders && (
         <section>
-          <SectionHeader title="Dividends" hint={`Budget ${peso(r.dividendBudget)} · split pro-rata by shares`} />
+          <SectionHeader title="Dividends" hint={`Budget ${peso(r.dividendBudget)} · split pro-rata across ${r.dividends.reduce((s, d) => s + d.shares, 0).toLocaleString()} shares`} />
           <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
             <table className="ledger">
               <thead>
@@ -31,7 +31,9 @@ export default function SummaryView({ dist }: { dist: Distribution }) {
               </tbody>
               <tfoot>
                 <tr className="bg-muted/50 font-semibold">
-                  <td className="px-3 py-2" colSpan={3}>Total dividends</td>
+                  <td className="px-3 py-2">Total dividends</td>
+                  <td className="px-3 py-2 text-right num">{r.dividends.reduce((s, d) => s + d.shares, 0).toLocaleString()}</td>
+                  <td className="px-3 py-2" />
                   <td className="px-3 py-2 text-right"><Money value={r.dividendPaidOut} /></td>
                 </tr>
               </tfoot>
