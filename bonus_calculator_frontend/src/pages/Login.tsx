@@ -45,10 +45,6 @@ export default function Login() {
           </div>
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button type="submit" className="w-full">Sign in</Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Demo accounts — <span className="num font-medium">admin / admin123</span> ·{' '}
-            <span className="num font-medium">manager / manager123</span>
-          </p>
         </form>
       </div>
     </div>
