@@ -128,7 +128,8 @@ defmodule BonusCalculatorBackend.SeedImport do
           "include_shareholders" => spec["include_shareholders"] || false,
           "dividends_budget" => spec["dividends_budget"] || 0,
           "bonus_budget" => spec["bonus_budget"] || 0,
-          "rounding_step" => spec["rounding_step"] || 10
+          "rounding_step" => spec["rounding_step"] || 10,
+          "planned_date" => spec["planned_date"]
         })
         |> Ecto.Changeset.put_change(:status, status)
         |> Ecto.Changeset.put_change(:created_by_id, user.id)
