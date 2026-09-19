@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router'
 import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { useStore } from '@/lib/store'
@@ -24,8 +25,15 @@ export default function Employees() {
   const [empName, setEmpName] = useState('')
   const [empClass, setEmpClass] = useState<EmployeeClassification | 'none'>('none')
   const [grpName, setGrpName] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
-  const [classFilter, setClassFilter] = useState<EmployeeClassification | 'all'>('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const statusFilter = (['active', 'archived', 'all'].includes(searchParams.get('status') ?? '') ? searchParams.get('status') : 'active') as StatusFilter
+  const classFilter = (searchParams.get('classification') ?? 'all') as EmployeeClassification | 'all'
+  const setFilters = (status: StatusFilter, classification: EmployeeClassification | 'all') => {
+    const next = new URLSearchParams(searchParams)
+    if (status === 'active') next.delete('status'); else next.set('status', status)
+    if (classification === 'all') next.delete('classification'); else next.set('classification', classification)
+    setSearchParams(next, { replace: true })
+  }
 
   const submitEmp = (e: FormEvent) => {
     e.preventDefault()
@@ -68,7 +76,7 @@ export default function Employees() {
         <section className="lg:col-span-2">
           <SectionHeader title="Employees" hint={visibleEmployees.length === db.employees.length ? `${db.employees.length} on record` : `${visibleEmployees.length} of ${db.employees.length} on record`} />
           <div className="mb-2 flex items-center gap-2">
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+            <Select value={statusFilter} onValueChange={(v) => setFilters(v as StatusFilter, classFilter)}>
               <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>
@@ -76,7 +84,7 @@ export default function Employees() {
                 <SelectItem value="all">All</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={classFilter} onValueChange={(v) => setClassFilter(v as EmployeeClassification | 'all')}>
+            <Select value={classFilter} onValueChange={(v) => setFilters(statusFilter, v as EmployeeClassification | 'all')}>
               <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All classifications</SelectItem>
