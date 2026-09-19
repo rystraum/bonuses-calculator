@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Archive, ArchiveRestore, Plus, Trash2 } from 'lucide-react'
+import { format } from 'date-fns'
 import { useStore } from '@/lib/store'
 import type { EmployeeClassification } from '@/lib/model'
 import { AppShell, SectionHeader } from '@/components/chrome'
@@ -8,6 +9,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+
+const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 
 const CLASSIFICATION_LABELS: Record<EmployeeClassification, string> = {
   full_time: 'Full-time',
@@ -95,6 +98,11 @@ export default function Employees() {
                             onBlur={(ev) => ev.target.value.trim() && renameEmployee(e.id, ev.target.value.trim())} />
                           {e.archived && (
                             <span className="shrink-0 rounded-full border bg-secondary px-2 py-0.5 text-[0.6875rem] font-medium">Archived</span>
+                          )}
+                          {e.archived && e.archivedAt && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {e.archivedBy ? `Archived by ${e.archivedBy.username}` : 'Archived'} · {fmtDateTime(e.archivedAt)}
+                            </span>
                           )}
                         </div>
                       </td>
