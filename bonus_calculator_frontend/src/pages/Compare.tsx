@@ -6,7 +6,7 @@ import { AppShell, SectionHeader } from '@/components/chrome'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-/** Signed peso delta, with % of the A-side base when given: green when B > A, red when B < A. */
+/** Signed peso delta (A − B), with % of the A-side base when given: green when A > B, red when A < B. */
 function Delta({ value, base }: { value: number; base?: number }) {
   if (Math.abs(value) < 0.005) return <span className="num text-muted-foreground">—</span>
   const sign = value > 0 ? '+' : '−'
@@ -35,7 +35,7 @@ export default function Compare() {
   const store = useStore()
   const dists = store.db.distributions
   const [searchParams, setSearchParams] = useSearchParams()
-  // Default: B = latest by planned date, A = second latest (Δ = B − A). Falls back to index order.
+  // Default: B = latest by planned date, A = second latest (Δ = A − B). Falls back to index order.
   const byPlannedDesc = [...dists].sort((x, y) => {
     if (x.plannedDate && y.plannedDate) return y.plannedDate.localeCompare(x.plannedDate)
     if (x.plannedDate) return -1
@@ -94,7 +94,7 @@ export default function Compare() {
         <div>
           <p className="kicker mb-1">Side by side</p>
           <h1 className="font-display text-2xl font-semibold tracking-tight">Compare distributions</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Δ is B − A — what changed from the base to the comparison.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Δ is A − B — positive when the base is bigger.</p>
         </div>
         <div className="flex flex-wrap gap-4">
           {picker(aId, setPick('a'), 'A · base')}
@@ -165,7 +165,7 @@ export default function Compare() {
                         </td>
                         <td className="r num align-top">{pa ? peso(pa.total) : dash}</td>
                         <td className="r num align-top">{pb ? peso(pb.total) : dash}</td>
-                        <td className="r align-top"><Delta value={(pb?.total ?? 0) - (pa?.total ?? 0)} base={pa?.total} /></td>
+                        <td className="r align-top"><Delta value={(pa?.total ?? 0) - (pb?.total ?? 0)} base={pa?.total} /></td>
                       </tr>
                     )
                   })}
@@ -196,7 +196,7 @@ export default function Compare() {
                           <td className="r num">{db ? db.shares : dash}</td>
                           <td className="r num">{da ? peso(da.amount) : dash}</td>
                           <td className="r num">{db ? peso(db.amount) : dash}</td>
-                          <td className="r"><Delta value={(db?.amount ?? 0) - (da?.amount ?? 0)} base={da?.amount} /></td>
+                          <td className="r"><Delta value={(da?.amount ?? 0) - (db?.amount ?? 0)} base={da?.amount} /></td>
                         </tr>
                       )
                     })}
@@ -226,7 +226,7 @@ export default function Compare() {
                       <td>{label}</td>
                       <td className="r num">{peso(va)}</td>
                       <td className="r num">{peso(vb)}</td>
-                      <td className="r"><Delta value={vb - va} base={va} /></td>
+                      <td className="r"><Delta value={va - vb} base={va} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -281,7 +281,7 @@ function GroupDiff({ name, a, b }: { name: string; a?: GroupResult; b?: GroupRes
                 <td className="r num">{mb ? pct(mb.multiplier) : dash}</td>
                 <td className="r num">{ma ? peso(ma.total) : dash}</td>
                 <td className="r num">{mb ? peso(mb.total) : dash}</td>
-                <td className="r"><Delta value={(mb?.total ?? 0) - (ma?.total ?? 0)} base={ma?.total} /></td>
+                <td className="r"><Delta value={(ma?.total ?? 0) - (mb?.total ?? 0)} base={ma?.total} /></td>
               </tr>
             )
           })}
