@@ -17,7 +17,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupMemberController do
           employee_id: member.employee_id,
           employee_name: member.employee_name,
           hours: Decimal.to_string(member.hours, :normal),
-          performance_multiplier: Decimal.to_string(member.performance_multiplier, :normal)
+          performance_multiplier: Decimal.to_string(member.performance_multiplier, :normal),
+          note: member.note
         }
       })
     end

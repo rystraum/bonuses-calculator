@@ -8,6 +8,7 @@ defmodule BonusCalculatorBackend.Distributions.DistributionGroupMember do
     field :employee_name, :string
     field :hours, :decimal, default: Decimal.new(0)
     field :performance_multiplier, :decimal, default: Decimal.new(100)
+    field :note, :string
 
     belongs_to :distribution_group, BonusCalculatorBackend.Distributions.DistributionGroup
     belongs_to :employee, BonusCalculatorBackend.People.Employee
@@ -22,7 +23,8 @@ defmodule BonusCalculatorBackend.Distributions.DistributionGroupMember do
       :employee_id,
       :employee_name,
       :hours,
-      :performance_multiplier
+      :performance_multiplier,
+      :note
     ])
     |> validate_required([:distribution_group_id, :employee_id, :employee_name])
     |> foreign_key_constraint(:distribution_group_id)
@@ -31,7 +33,7 @@ defmodule BonusCalculatorBackend.Distributions.DistributionGroupMember do
 
   def update_changeset(member, attrs) do
     member
-    |> cast(attrs, [:hours, :performance_multiplier])
+    |> cast(attrs, [:hours, :performance_multiplier, :note])
     |> validate_number(:hours, greater_than_or_equal_to: 0)
     |> validate_number(:performance_multiplier, greater_than_or_equal_to: 0)
   end
