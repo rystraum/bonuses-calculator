@@ -6,7 +6,7 @@ defmodule BonusCalculatorBackendWeb.EmployeeControllerTest do
   setup do
     {:ok, user} = Accounts.create_user(%{"username" => "admin", "password" => "admin123"})
     {:ok, token} = Accounts.create_api_token(user)
-    %{token: token.token}
+    %{user: user, token: token.token}
   end
 
   defp authed_conn(conn, token) do
@@ -43,7 +43,11 @@ defmodule BonusCalculatorBackendWeb.EmployeeControllerTest do
     assert %{"errors" => %{"classification" => ["is invalid"]}} = json_response(conn, 422)
   end
 
-  test "PATCH /api/employees/:id archives and unarchives", %{conn: conn, token: token} do
+  test "PATCH /api/employees/:id archives and unarchives", %{
+    conn: conn,
+    token: token,
+    user: user
+  } do
     {:ok, employee} = People.create_employee(%{"name" => "Alice"})
 
     conn =
@@ -51,17 +55,24 @@ defmodule BonusCalculatorBackendWeb.EmployeeControllerTest do
       |> authed_conn(token)
       |> patch(~p"/api/employees/#{employee.id}", %{archived: true})
 
-    assert %{"data" => %{"archived" => true, "archived_at" => archived_at}} =
-             json_response(conn, 200)
+    assert %{
+             "data" => %{
+               "archived" => true,
+               "archived_at" => archived_at,
+               "archived_by" => %{"id" => archived_by_id, "username" => "admin"}
+             }
+           } = json_response(conn, 200)
 
     assert is_binary(archived_at)
+    assert archived_by_id == user.id
 
     conn =
       build_conn()
       |> authed_conn(token)
       |> patch(~p"/api/employees/#{employee.id}", %{archived: false})
 
-    assert %{"data" => %{"archived" => false, "archived_at" => nil}} = json_response(conn, 200)
+    assert %{"data" => %{"archived" => false, "archived_at" => nil, "archived_by" => nil}} =
+             json_response(conn, 200)
   end
 
   test "GET /api/employees includes classification and archived flags", %{
@@ -83,6 +94,8 @@ defmodule BonusCalculatorBackendWeb.EmployeeControllerTest do
     assert by_name["Gone"]["classification"] == nil
     assert by_name["Gone"]["archived"] == true
     assert is_binary(by_name["Gone"]["archived_at"])
+    # Archived via a code path without a user — archived_by stays null.
+    assert by_name["Gone"]["archived_by"] == nil
 
     assert active.id == by_name["Active"]["id"]
   end

@@ -25,7 +25,8 @@ defmodule BonusCalculatorBackendWeb.EmployeeController do
   def update(conn, %{"id" => id} = params) do
     employee = People.get_employee!(id)
 
-    with {:ok, %Employee{} = employee} <- People.update_employee(employee, params) do
+    with {:ok, %Employee{} = employee} <-
+           People.update_employee(employee, params, conn.assigns.current_user) do
       json(conn, %{data: employee_json(employee)})
     end
   end
@@ -44,7 +45,12 @@ defmodule BonusCalculatorBackendWeb.EmployeeController do
       name: employee.name,
       classification: employee.classification,
       archived: not is_nil(employee.archived_at),
-      archived_at: employee.archived_at
+      archived_at: employee.archived_at,
+      archived_by: user_json(employee.archived_by)
     }
   end
+
+  defp user_json(%Ecto.Association.NotLoaded{}), do: nil
+  defp user_json(nil), do: nil
+  defp user_json(user), do: %{id: user.id, username: user.username}
 end
