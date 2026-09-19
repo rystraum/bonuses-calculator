@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
-  DB, Distribution, DistributionResult, GroupResult, PersonPayout, UUID,
+  DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, UUID,
 } from './model'
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -78,7 +78,11 @@ async function apiFetch<T = unknown>(
 
 // ─── API payload types + mappers (snake_case strings → UI model) ─────────────
 
-interface ApiEmployee { id: string; name: string }
+interface ApiEmployee {
+  id: string; name: string
+  classification: EmployeeClassification | null
+  archived: boolean; archived_at: string | null
+}
 interface ApiShareholder { id: string; name: string; shares: number; employee_id: string | null }
 interface ApiGroup { id: string; name: string; employees: { id: string; name: string }[] }
 interface ApiDistMember {
@@ -282,8 +286,10 @@ interface StoreCtx {
   addShareholder: (name: string, shares: number, employeeId: UUID | null) => Promise<string | null>
   updateShareholder: (id: UUID, patch: Partial<{ name: string; shares: number; employeeId: UUID | null }>) => Promise<string | null>
   removeShareholder: (id: UUID) => Promise<string | null>
-  addEmployee: (name: string) => Promise<string | null>
+  addEmployee: (name: string, classification: EmployeeClassification | null) => Promise<string | null>
   renameEmployee: (id: UUID, name: string) => Promise<string | null>
+  setEmployeeClassification: (id: UUID, classification: EmployeeClassification | null) => Promise<string | null>
+  setEmployeeArchived: (id: UUID, archived: boolean) => Promise<string | null>
   removeEmployee: (id: UUID) => Promise<string | null>
   addGroup: (name: string) => Promise<string | null>
   renameGroup: (id: UUID, name: string) => Promise<string | null>
@@ -379,7 +385,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ])
     setDb((prev) => ({
       ...prev,
-      employees: employees.map((e) => ({ id: e.id, name: e.name })),
+      employees: employees.map((e) => ({
+        id: e.id, name: e.name,
+        classification: e.classification ?? null,
+        archived: !!e.archived, archivedAt: e.archived_at ?? null,
+      })),
       shareholders: shareholders.map((s) => ({
         id: s.id, name: s.name, shares: num(s.shares), employeeId: s.employee_id,
       })),
@@ -485,10 +495,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeShareholder: (id) =>
       run(() => apiFetch(`/shareholders/${id}`, { method: 'DELETE' }), reloadCore),
 
-    addEmployee: (name) =>
-      run(() => apiFetch('/employees', { method: 'POST', body: { name } }), reloadCore),
+    addEmployee: (name, classification) =>
+      run(() => apiFetch('/employees', { method: 'POST', body: { name, classification } }), reloadCore),
     renameEmployee: (id, name) =>
       run(() => apiFetch(`/employees/${id}`, { method: 'PATCH', body: { name } }), reloadCore),
+    setEmployeeClassification: (id, classification) =>
+      run(() => apiFetch(`/employees/${id}`, { method: 'PATCH', body: { classification } }), reloadCore),
+    setEmployeeArchived: (id, archived) =>
+      run(() => apiFetch(`/employees/${id}`, { method: 'PATCH', body: { archived } }), reloadCore),
     removeEmployee: (id) =>
       run(() => apiFetch(`/employees/${id}`, { method: 'DELETE' }), reloadCore),
 
