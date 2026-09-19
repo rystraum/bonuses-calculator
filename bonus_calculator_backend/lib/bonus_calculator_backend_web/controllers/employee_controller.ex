@@ -39,6 +39,12 @@ defmodule BonusCalculatorBackendWeb.EmployeeController do
   end
 
   defp employee_json(employee) do
-    %{id: employee.id, name: employee.name}
+    %{
+      id: employee.id,
+      name: employee.name,
+      classification: employee.classification,
+      archived: not is_nil(employee.archived_at),
+      archived_at: employee.archived_at
+    }
   end
 end
