@@ -9,11 +9,11 @@ defmodule BonusCalculatorBackend.Groups do
   alias BonusCalculatorBackend.Repo
 
   def list_employee_groups do
-    Repo.all(from g in EmployeeGroup, order_by: g.name, preload: :employees)
+    Repo.all(from g in EmployeeGroup, order_by: g.name, preload: [employees: :archived_by])
   end
 
   def get_employee_group!(id) do
-    Repo.get!(EmployeeGroup, id) |> Repo.preload(:employees)
+    Repo.get!(EmployeeGroup, id) |> Repo.preload(employees: :archived_by)
   end
 
   def create_employee_group(attrs) do

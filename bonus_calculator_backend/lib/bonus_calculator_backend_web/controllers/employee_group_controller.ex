@@ -69,11 +69,16 @@ defmodule BonusCalculatorBackendWeb.EmployeeGroupController do
               name: e.name,
               classification: e.classification,
               archived: not is_nil(e.archived_at),
-              archived_at: e.archived_at
+              archived_at: e.archived_at,
+              archived_by: user_json(e.archived_by)
             }
           end)
       end
 
     %{id: group.id, name: group.name, employees: employees}
   end
+
+  defp user_json(%Ecto.Association.NotLoaded{}), do: nil
+  defp user_json(nil), do: nil
+  defp user_json(user), do: %{id: user.id, username: user.username}
 end
