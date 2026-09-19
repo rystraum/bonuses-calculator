@@ -110,12 +110,20 @@ export default function Distributions() {
             </tr>
           </thead>
           <tbody>
-            {yearGroups.map((g) => (
+            {yearGroups.map((g) => {
+              const bonusTotal = g.items.reduce((s, d) => s + d.bonusBudget, 0)
+              const dividendTotal = g.items.reduce((s, d) => s + (d.includeShareholders ? d.dividendBudget : 0), 0)
+              const grandTotal = g.items.reduce((s, d) => s + (d.result ? d.result.grandTotal : d.bonusBudget + (d.includeShareholders ? d.dividendBudget : 0)), 0)
+              return (
               <Fragment key={g.year}>
                 <tr className="bg-muted/50">
-                  <td colSpan={8} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <td colSpan={4} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {g.year}
                   </td>
+                  <td className="r px-3 py-1.5 text-xs font-semibold num text-muted-foreground">{peso(bonusTotal)}</td>
+                  <td className="r px-3 py-1.5 text-xs font-semibold num text-muted-foreground">{dividendTotal ? peso(dividendTotal) : ''}</td>
+                  <td className="r px-3 py-1.5 text-xs font-semibold num text-muted-foreground">{peso(grandTotal)}</td>
+                  <td />
                 </tr>
                 {g.items.map((d) => (
               <tr key={d.id}>
@@ -169,7 +177,8 @@ export default function Distributions() {
               </tr>
                 ))}
               </Fragment>
-            ))}
+              )
+            })}
             {db.distributions.length === 0 && (
               <tr><td colSpan={8} className="py-10 text-center text-sm text-muted-foreground">No distributions yet — create one to get started.</td></tr>
             )}
