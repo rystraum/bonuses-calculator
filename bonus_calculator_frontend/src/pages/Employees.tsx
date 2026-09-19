@@ -66,7 +66,7 @@ export default function Employees() {
       <div className="grid gap-6 lg:grid-cols-5">
         {/* employees */}
         <section className="lg:col-span-2">
-          <SectionHeader title="Employees" hint={`${db.employees.length} on record`} />
+          <SectionHeader title="Employees" hint={visibleEmployees.length === db.employees.length ? `${db.employees.length} on record` : `${visibleEmployees.length} of ${db.employees.length} on record`} />
           <div className="mb-2 flex items-center gap-2">
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
               <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
