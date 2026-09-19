@@ -80,13 +80,15 @@ defmodule BonusCalculatorBackend.Calculator do
 
     total_hours = Enum.reduce(group.members, @zero, &Decimal.add(&2, &1.hours))
 
-    peso_per_impact = floor_to_step(safe_div(impact_budget, total_multiplier), step)
-    peso_per_hour = floor_to_step(safe_div(effort_budget, total_hours), step)
+    overridden? = Enum.any?(group.members, &amounts_overridden?/1)
+
+    computed_peso_per_impact = floor_to_step(safe_div(impact_budget, total_multiplier), step)
+    computed_peso_per_hour = floor_to_step(safe_div(effort_budget, total_hours), step)
 
     members =
       Enum.map(group.members, fn member ->
-        impact_amount = Decimal.mult(member.performance_multiplier, peso_per_impact)
-        effort_amount = Decimal.mult(member.hours, peso_per_hour)
+        {impact_amount, effort_amount} =
+          member_amounts(member, computed_peso_per_impact, computed_peso_per_hour)
 
         %{
           id: member.id,
@@ -102,6 +104,24 @@ defmodule BonusCalculatorBackend.Calculator do
           total: dec(Decimal.add(impact_amount, effort_amount))
         }
       end)
+
+    {peso_per_impact, peso_per_hour} =
+      if overridden? do
+        # Groups with sheet-exact overrides display effective rates derived
+        # from the amount sums instead of the floor-to-step computed rates.
+        total_impact =
+          Enum.reduce(members, @zero, &Decimal.add(&2, Decimal.new(&1.impact_amount)))
+
+        total_effort =
+          Enum.reduce(members, @zero, &Decimal.add(&2, Decimal.new(&1.effort_amount)))
+
+        {
+          safe_div(total_impact, total_multiplier) |> Decimal.round(2),
+          safe_div(total_effort, total_hours) |> Decimal.round(2)
+        }
+      else
+        {computed_peso_per_impact, computed_peso_per_hour}
+      end
 
     %{
       id: group.id,
@@ -127,6 +147,23 @@ defmodule BonusCalculatorBackend.Calculator do
       {group.impact_weight, group.effort_weight}
     else
       {distribution.impact_weight, distribution.effort_weight}
+    end
+  end
+
+  defp amounts_overridden?(member) do
+    not is_nil(member.impact_amount) and not is_nil(member.effort_amount)
+  end
+
+  # Members with sheet-exact overrides (imported historical distributions)
+  # keep their amounts verbatim; everyone else is computed from the rates.
+  defp member_amounts(member, peso_per_impact, peso_per_hour) do
+    if amounts_overridden?(member) do
+      {member.impact_amount, member.effort_amount}
+    else
+      {
+        Decimal.mult(member.performance_multiplier, peso_per_impact),
+        Decimal.mult(member.hours, peso_per_hour)
+      }
     end
   end
 

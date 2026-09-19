@@ -172,4 +172,77 @@ defmodule BonusCalculatorBackend.CalculatorTest do
     assert result.totals.grand_total == "0"
     assert result.totals.within_tolerance == true
   end
+
+  test "amount overrides pass through verbatim while others keep floor-to-step", _ctx do
+    {:ok, e1} = People.create_employee(%{"name" => "Overridden"})
+    {:ok, e2} = People.create_employee(%{"name" => "Computed"})
+    {:ok, group} = Groups.create_employee_group(%{"name" => "Mixed"})
+    {:ok, _} = Groups.add_member(group, e1.id)
+    {:ok, _} = Groups.add_member(group, e2.id)
+
+    {:ok, distribution} =
+      Distributions.create_distribution(%{
+        "name" => "Overrides",
+        "bonus_budget" => "10000",
+        "effort_weight" => 50,
+        "impact_weight" => 50,
+        "rounding_step" => 10
+      })
+
+    {:ok, dist_group} =
+      Distributions.add_group(distribution, %{
+        "employee_group_id" => group.id,
+        "allocation_pct" => "100"
+      })
+
+    set_member = fn employee_id, hours, multiplier ->
+      member = Enum.find(dist_group.members, &(&1.employee_id == employee_id))
+
+      {:ok, _} =
+        Distributions.update_member(member, %{
+          "hours" => hours,
+          "performance_multiplier" => multiplier
+        })
+    end
+
+    set_member.(e1.id, "100", "100")
+    set_member.(e2.id, "50", "50")
+
+    # Sheet-exact overrides are set directly on the row (as the importer does).
+    overridden = Enum.find(dist_group.members, &(&1.employee_id == e1.id))
+
+    _updated =
+      overridden
+      |> Ecto.Changeset.change(
+        impact_amount: Decimal.new("3333.33"),
+        effort_amount: Decimal.new("3333.33")
+      )
+      |> Repo.update!()
+
+    distribution = Distributions.get_distribution_full!(distribution.id)
+    result = Calculator.compute(distribution, [])
+    [mixed] = result.groups
+    members = Map.new(mixed.members, &{&1.employee_name, &1})
+
+    # The overridden member keeps its exact amounts; percentages still derive
+    # from multiplier/hours.
+    assert Decimal.eq?(Decimal.new(members["Overridden"].impact_amount), Decimal.new("3333.33"))
+    assert Decimal.eq?(Decimal.new(members["Overridden"].effort_amount), Decimal.new("3333.33"))
+    assert Decimal.eq?(Decimal.new(members["Overridden"].total), Decimal.new("6666.66"))
+    assert members["Overridden"].impact_pct == "66.67"
+    assert members["Overridden"].effort_pct == "66.67"
+
+    # The plain member is computed with floor-to-step: budgets 5000/5000 over
+    # total 150 give 33.33..., floored to 30.
+    assert members["Computed"].impact_amount == "1500"
+    assert members["Computed"].effort_amount == "1500"
+
+    # Displayed rates derive from the amount sums: 4833.33/150 = 32.2222...
+    assert mixed.peso_per_impact == "32.22"
+    assert mixed.peso_per_hour == "32.22"
+
+    # Aggregation flows through the overridden amounts.
+    assert result.totals.computed_bonus_total == "9666.66"
+    assert result.totals.within_tolerance == true
+  end
 end
