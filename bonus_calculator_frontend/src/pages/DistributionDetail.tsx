@@ -1,0 +1,352 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, Navigate, useParams } from 'react-router'
+import { ArrowLeft, CheckCheck, Lock, Plus, Trash2 } from 'lucide-react'
+import { peso, pct, EMPTY_RESULT, type Distribution } from '@/lib/model'
+import { useStore } from '@/lib/store'
+import { AppShell, Money, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
+import SummaryView from '@/components/SummaryView'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+
+export default function DistributionDetail() {
+  const { id } = useParams<{ id: string }>()
+  const store = useStore()
+  const { refreshDistribution } = store
+  const dist = store.db.distributions.find((d) => d.id === id)
+
+  // Fresh snapshot + computation whenever this page is opened.
+  useEffect(() => {
+    if (id) refreshDistribution(id).catch(() => {})
+  }, [refreshDistribution, id])
+
+  if (!dist) return <Navigate to="/" replace />
+
+  return (
+    <AppShell>
+      <div className="mb-6">
+        <Link to="/" className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> All distributions
+        </Link>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-2xl font-semibold tracking-tight">{dist.name}</h1>
+              <StatusBadge status={dist.status} />
+            </div>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{dist.description}</p>
+          </div>
+          <div className="flex gap-2">
+            {dist.status === 'drafted' && <FinalizeButton dist={dist} />}
+            {dist.status === 'finalized' && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="secondary"><CheckCheck className="mr-1.5 h-4 w-4" /> Mark as paid out</Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Mark as paid out?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This records that all payouts for “{dist.name}” have been disbursed. The distribution stays frozen.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => store.markPaidOut(dist.id)}>Mark paid out</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {dist.status === 'drafted' ? <DraftEditor dist={dist} /> : <SummaryView dist={dist} />}
+    </AppShell>
+  )
+}
+
+// ─── finalize ────────────────────────────────────────────────────────────────
+
+function FinalizeButton({ dist }: { dist: Distribution }) {
+  const { finalizeDistribution } = useStore()
+  const memberCount = dist.groups.reduce((s, g) => s + g.members.length, 0)
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button><Lock className="mr-1.5 h-4 w-4" /> Finalize</Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Finalize “{dist.name}”?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <p>Finalizing freezes this distribution into a read-only snapshot. Later changes to employees, groups, or shareholders will not affect it.</p>
+              <div className="num rounded-md border bg-muted/50 p-3 text-sm">
+                <div className="flex justify-between"><span>Bonus budget</span><b>{peso(dist.bonusBudget)}</b></div>
+                {dist.includeShareholders && (
+                  <div className="flex justify-between"><span>Dividend budget</span><b>{peso(dist.dividendBudget)}</b></div>
+                )}
+                <div className="flex justify-between"><span>Groups / members</span><b>{dist.groups.length} / {memberCount}</b></div>
+                <div className="flex justify-between"><span>Special bonuses</span><b>{dist.specialBonuses.length}</b></div>
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction onClick={() => finalizeDistribution(dist.id)}>Finalize</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// ─── draft editor ─────────────────────────────────────────────────────────────
+
+function DraftEditor({ dist }: { dist: Distribution }) {
+  const store = useStore()
+  const { db } = store
+  const preview = store.computations[dist.id] ?? EMPTY_RESULT
+
+  const allocTotal = dist.groups.reduce((s, g) => s + g.allocationPct, 0)
+  const addableGroups = db.groups.filter((g) => !dist.groups.some((dg) => dg.groupId === g.id))
+
+  return (
+    <div className="space-y-10">
+      {/* config strip */}
+      <section className="rounded-lg border bg-card p-4 shadow-xs">
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="block">
+            <span className="kicker mb-1.5 block">Total bonus budget</span>
+            <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.bonusBudget}
+              onCommit={(n) => store.updateDistribution(dist.id, { bonusBudget: n })} />
+          </label>
+          <div>
+            <span className="kicker mb-1.5 block">Impact / effort weighting</span>
+            <div className="flex items-center gap-2">
+              <NumInput className="!border-input h-10 !bg-background font-semibold" value={dist.impactPct} suffix="% impact"
+                onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, n)) })} />
+              <NumInput className="!border-input h-10 !bg-background font-semibold" value={100 - dist.impactPct} suffix="% effort"
+                onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, 100 - n)) })} />
+            </div>
+            <p className="mt-1 text-[0.6875rem] text-muted-foreground">Always totals 100% — editing one side adjusts the other.</p>
+          </div>
+          {dist.includeShareholders && (
+            <label className="block">
+              <span className="kicker mb-1.5 block">Total dividend budget</span>
+              <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.dividendBudget}
+                onCommit={(n) => store.updateDistribution(dist.id, { dividendBudget: n })} />
+            </label>
+          )}
+          <div>
+            <span className="kicker mb-1.5 block">Group allocation</span>
+            <div className={cn(
+              'num flex h-10 items-center rounded-md border px-3 text-lg font-semibold',
+              Math.abs(allocTotal - 100) < 0.001 ? 'text-emerald-700' : 'text-amber-700',
+            )}>
+              {pct(allocTotal)}
+            </div>
+            <p className="mt-1 text-[0.6875rem] text-muted-foreground">
+              {Math.abs(allocTotal - 100) < 0.001 ? 'Fully allocated.' : 'Should total 100% across groups.'}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* dividends preview */}
+      {dist.includeShareholders && (
+        <section>
+          <SectionHeader title="Dividends" hint="Auto-split of the dividend budget by shares owned — updates live as you type">
+            <Money value={preview.dividendPaidOut} className="text-sm font-semibold" />
+          </SectionHeader>
+          <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+            <table className="ledger">
+              <thead>
+                <tr><th>Shareholder</th><th className="r">Shares</th><th className="r">Ownership</th><th className="r">Dividend</th></tr>
+              </thead>
+              <tbody>
+                {preview.dividends.map((d) => (
+                  <tr key={d.shareholderId}>
+                    <td className="font-medium">{d.name}</td>
+                    <td className="r num">{d.shares}</td>
+                    <td className="r num text-muted-foreground">{pct(d.pct)}</td>
+                    <td className="r"><Money value={d.amount} className="font-semibold" /></td>
+                  </tr>
+                ))}
+                {preview.dividends.length === 0 && (
+                  <tr><td colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                    No shareholders yet — add them under Admin setup → Shareholders.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* bonus groups */}
+      <section>
+        <SectionHeader title="Bonuses by group" hint="Encode hours (effort) and multiplier (impact) per member — amounts update live">
+          <Select value="" onValueChange={(gid) => gid && store.addGroupToDistribution(dist.id, gid)} disabled={addableGroups.length === 0}>
+            <SelectTrigger className="h-9 w-56">
+              <SelectValue placeholder={addableGroups.length ? '+ Add employee group' : 'All groups added'} />
+            </SelectTrigger>
+            <SelectContent>
+              {addableGroups.map((g) => (
+                <SelectItem key={g.id} value={g.id}>{g.name} ({g.memberIds.length})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SectionHeader>
+
+        <div className="space-y-4">
+          {dist.groups.map((g) => {
+            const pg = preview.groups.find((x) => x.groupId === g.id)
+            return (
+              <div key={g.id} className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b bg-muted/40 px-3 py-2">
+                  <span className="font-display text-base font-semibold">{g.name}</span>
+                  <div className="flex items-center gap-4">
+                    <label className="flex w-44 items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="shrink-0">Pool share</span>
+                      <NumInput value={g.allocationPct} suffix="%"
+                        onCommit={(n) => store.updateDistGroupAllocation(dist.id, g.id, n)} />
+                    </label>
+                    {pg && (
+                      <span className="num hidden text-xs text-muted-foreground sm:block">
+                        {peso(pg.budget)} budget → <b className="text-foreground">{peso(pg.paidOut)}</b> paid
+                      </span>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      title="Remove group"
+                      onClick={() => store.removeGroupFromDistribution(dist.id, g.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <table className="ledger">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th className="r w-32">Hours (effort)</th>
+                      <th className="r w-36">Multiplier (impact)</th>
+                      <th className="r">Effort ₱</th>
+                      <th className="r">Impact ₱</th>
+                      <th className="r">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.members.map((m) => {
+                      const pm = pg?.members.find((x) => x.employeeId === m.employeeId)
+                      return (
+                        <tr key={m.id}>
+                          <td className="font-medium">{m.name}</td>
+                          <td className="r">
+                            <NumInput value={m.hours} suffix="hrs"
+                              onCommit={(n) => store.updateDistMember(dist.id, m.id, { hours: n })} />
+                          </td>
+                          <td className="r">
+                            <NumInput value={m.multiplier} suffix="%"
+                              onCommit={(n) => store.updateDistMember(dist.id, m.id, { multiplier: n })} />
+                          </td>
+                          <td className="r num text-muted-foreground">{pm ? peso(pm.effortAmount) : '—'}</td>
+                          <td className="r num text-muted-foreground">{pm ? peso(pm.impactAmount) : '—'}</td>
+                          <td className="r">{pm ? <Money value={pm.total} className="font-semibold" /> : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                    {g.members.length === 0 && (
+                      <tr><td colSpan={6} className="py-6 text-center text-sm text-muted-foreground">This group has no members.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+          {dist.groups.length === 0 && (
+            <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+              Add an employee group to start encoding bonuses.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <SpecialBonuses dist={dist} />
+    </div>
+  )
+}
+
+// ─── special bonuses ─────────────────────────────────────────────────────────
+
+function SpecialBonuses({ dist }: { dist: Distribution }) {
+  const store = useStore()
+  const { db } = store
+  const [empId, setEmpId] = useState('')
+  const [customName, setCustomName] = useState('')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const amt = Number(amount)
+    if (!Number.isFinite(amt) || amt <= 0) return
+    const isCustom = empId === 'custom' || !empId
+    const name = isCustom ? customName.trim() : db.employees.find((x) => x.id === empId)?.name ?? ''
+    if (!name) return
+    store.addSpecialBonus(dist.id, isCustom ? null : empId, name, amt, note.trim())
+    setEmpId(''); setCustomName(''); setAmount(''); setNote('')
+  }
+
+  return (
+    <section>
+      <SectionHeader title="Special bonuses" hint="Fixed amounts for specific people — excluded from the 5% budget tolerance check" />
+      {dist.specialBonuses.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-lg border bg-card shadow-xs">
+          <table className="ledger">
+            <thead>
+              <tr><th>Person</th><th>Note</th><th className="r">Amount</th><th className="r" /></tr>
+            </thead>
+            <tbody>
+              {dist.specialBonuses.map((b) => (
+                <tr key={b.id}>
+                  <td className="font-medium">{b.name}</td>
+                  <td className="text-muted-foreground">{b.note || '—'}</td>
+                  <td className="r"><Money value={b.amount} className="font-semibold" /></td>
+                  <td className="r">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => store.removeSpecialBonus(dist.id, b.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+        <Select value={empId} onValueChange={setEmpId}>
+          <SelectTrigger className="h-9 w-44"><SelectValue placeholder="Pick employee…" /></SelectTrigger>
+          <SelectContent>
+            {db.employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+            <SelectItem value="custom">Someone else…</SelectItem>
+          </SelectContent>
+        </Select>
+        {(empId === 'custom' || !empId) && (
+          <Input className="h-9 w-40" placeholder="Name" value={customName} onChange={(e) => setCustomName(e.target.value)} />
+        )}
+        <Input className="num h-9 w-36 text-right" type="number" min={1} placeholder="Amount (₱)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <Input className="h-9 w-52" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <Button type="submit" variant="secondary" disabled={!amount}>
+          <Plus className="mr-1.5 h-4 w-4" /> Add special bonus
+        </Button>
+      </form>
+    </section>
+  )
+}
