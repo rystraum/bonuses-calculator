@@ -97,18 +97,22 @@ export default function Employees() {
                   return (
                     <tr key={e.id} className={cn(e.archived && 'text-muted-foreground')}>
                       <td>
-                        <div className="flex items-center gap-2">
+                        {e.archived ? (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{e.name}</span>
+                              <span className="shrink-0 rounded-full border bg-secondary px-2 py-0.5 text-[0.6875rem] font-medium">Archived</span>
+                            </div>
+                            {e.archivedAt && (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {e.archivedBy ? `Archived by ${e.archivedBy.username}` : 'Archived'} · {fmtDateTime(e.archivedAt)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
                           <input className="cell-input !text-left font-medium" defaultValue={e.name}
                             onBlur={(ev) => ev.target.value.trim() && renameEmployee(e.id, ev.target.value.trim())} />
-                          {e.archived && (
-                            <span className="shrink-0 rounded-full border bg-secondary px-2 py-0.5 text-[0.6875rem] font-medium">Archived</span>
-                          )}
-                          {e.archived && e.archivedAt && (
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {e.archivedBy ? `Archived by ${e.archivedBy.username}` : 'Archived'} · {fmtDateTime(e.archivedAt)}
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </td>
                       <td className="w-36">
                         <Select
