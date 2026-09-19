@@ -82,6 +82,7 @@ interface ApiEmployee {
   id: string; name: string
   classification: EmployeeClassification | null
   archived: boolean; archived_at: string | null
+  archived_by: ApiUserRef | null
 }
 interface ApiShareholder { id: string; name: string; shares: number; employee_id: string | null }
 interface ApiGroup { id: string; name: string; employees: { id: string; name: string }[] }
@@ -389,6 +390,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: e.id, name: e.name,
         classification: e.classification ?? null,
         archived: !!e.archived, archivedAt: e.archived_at ?? null,
+        archivedBy: e.archived_by ?? null,
       })),
       shareholders: shareholders.map((s) => ({
         id: s.id, name: s.name, shares: num(s.shares), employeeId: s.employee_id,

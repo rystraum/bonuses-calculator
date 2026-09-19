@@ -28,6 +28,7 @@ export interface Employee {
   classification: EmployeeClassification | null
   archived: boolean
   archivedAt: string | null
+  archivedBy: { id: UUID; username: string } | null
 }
 
 export interface EmployeeGroup {
