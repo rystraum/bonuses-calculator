@@ -5,12 +5,15 @@ import { AppShell, SectionHeader } from '@/components/chrome'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-/** Signed peso delta: green when B > A, red when B < A. */
-function Delta({ value }: { value: number }) {
+/** Signed peso delta, with % of the A-side base when given: green when B > A, red when B < A. */
+function Delta({ value, base }: { value: number; base?: number }) {
   if (Math.abs(value) < 0.005) return <span className="num text-muted-foreground">—</span>
+  const sign = value > 0 ? '+' : '−'
+  const showPct = base !== undefined && Math.abs(base) >= 0.005
   return (
     <span className={cn('num font-medium', value > 0 ? 'text-green-600' : 'text-red-600')}>
-      {value > 0 ? '+' : '−'}{peso(Math.abs(value))}
+      {sign}{peso(Math.abs(value))}
+      {showPct && <span className="ml-1 font-normal opacity-75">({sign}{pct((Math.abs(value) / Math.abs(base!)) * 100)})</span>}
     </span>
   )
 }
@@ -147,7 +150,7 @@ export default function Compare() {
                         </td>
                         <td className="r num align-top">{pa ? peso(pa.total) : dash}</td>
                         <td className="r num align-top">{pb ? peso(pb.total) : dash}</td>
-                        <td className="r align-top"><Delta value={(pb?.total ?? 0) - (pa?.total ?? 0)} /></td>
+                        <td className="r align-top"><Delta value={(pb?.total ?? 0) - (pa?.total ?? 0)} base={pa?.total} /></td>
                       </tr>
                     )
                   })}
@@ -178,7 +181,7 @@ export default function Compare() {
                           <td className="r num">{db ? db.shares : dash}</td>
                           <td className="r num">{da ? peso(da.amount) : dash}</td>
                           <td className="r num">{db ? peso(db.amount) : dash}</td>
-                          <td className="r"><Delta value={(db?.amount ?? 0) - (da?.amount ?? 0)} /></td>
+                          <td className="r"><Delta value={(db?.amount ?? 0) - (da?.amount ?? 0)} base={da?.amount} /></td>
                         </tr>
                       )
                     })}
@@ -208,7 +211,7 @@ export default function Compare() {
                       <td>{label}</td>
                       <td className="r num">{peso(va)}</td>
                       <td className="r num">{peso(vb)}</td>
-                      <td className="r"><Delta value={vb - va} /></td>
+                      <td className="r"><Delta value={vb - va} base={va} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -263,7 +266,7 @@ function GroupDiff({ name, a, b }: { name: string; a?: GroupResult; b?: GroupRes
                 <td className="r num">{mb ? pct(mb.multiplier) : dash}</td>
                 <td className="r num">{ma ? peso(ma.total) : dash}</td>
                 <td className="r num">{mb ? peso(mb.total) : dash}</td>
-                <td className="r"><Delta value={(mb?.total ?? 0) - (ma?.total ?? 0)} /></td>
+                <td className="r"><Delta value={(mb?.total ?? 0) - (ma?.total ?? 0)} base={ma?.total} /></td>
               </tr>
             )
           })}
