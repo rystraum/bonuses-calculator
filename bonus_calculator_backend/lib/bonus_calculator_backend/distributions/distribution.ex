@@ -16,9 +16,18 @@ defmodule BonusCalculatorBackend.Distributions.Distribution do
     field :effort_weight, :integer, default: 50
     field :impact_weight, :integer, default: 50
     field :rounding_step, :integer, default: 10
+    field :finalized_at, :utc_datetime
+    field :paid_out_at, :utc_datetime
+
+    belongs_to :created_by, BonusCalculatorBackend.Accounts.User
+    belongs_to :finalized_by, BonusCalculatorBackend.Accounts.User
+    belongs_to :paid_out_by, BonusCalculatorBackend.Accounts.User
 
     has_many :distribution_groups, BonusCalculatorBackend.Distributions.DistributionGroup
     has_many :special_bonuses, BonusCalculatorBackend.Distributions.DistributionSpecialBonus
+
+    has_many :distribution_shareholders,
+             BonusCalculatorBackend.Distributions.DistributionShareholder
 
     timestamps(type: :utc_datetime)
   end
@@ -44,9 +53,10 @@ defmodule BonusCalculatorBackend.Distributions.Distribution do
     |> validate_weights_sum()
   end
 
-  def status_changeset(distribution, status) do
+  def status_changeset(distribution, status, attrs \\ %{}) do
     distribution
-    |> change(status: status)
+    |> cast(attrs, [:finalized_by_id, :finalized_at, :paid_out_by_id, :paid_out_at])
+    |> put_change(:status, status)
     |> validate_inclusion(:status, @statuses)
   end
 

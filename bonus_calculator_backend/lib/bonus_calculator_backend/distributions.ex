@@ -12,14 +12,19 @@ defmodule BonusCalculatorBackend.Distributions do
     Distribution,
     DistributionGroup,
     DistributionGroupMember,
+    DistributionShareholder,
     DistributionSpecialBonus
   }
 
+  alias BonusCalculatorBackend.Accounts.User
   alias BonusCalculatorBackend.Groups.EmployeeGroup
+  alias BonusCalculatorBackend.People
   alias BonusCalculatorBackend.Repo
 
+  @audit_assocs [:created_by, :finalized_by, :paid_out_by]
+
   def list_distributions do
-    Repo.all(from d in Distribution, order_by: [desc: d.inserted_at])
+    Repo.all(from d in Distribution, order_by: [desc: d.inserted_at], preload: ^@audit_assocs)
   end
 
   def get_distribution!(id), do: Repo.get!(Distribution, id)
@@ -27,14 +32,26 @@ defmodule BonusCalculatorBackend.Distributions do
   def get_distribution_full!(id) do
     Distribution
     |> Repo.get!(id)
-    |> Repo.preload(distribution_groups: :members, special_bonuses: :employee)
+    |> Repo.preload(
+      [
+        distribution_groups: :members,
+        special_bonuses: :employee,
+        distribution_shareholders: :shareholder
+      ] ++ @audit_assocs
+    )
   end
 
-  def create_distribution(attrs) do
+  def create_distribution(attrs, user \\ nil) do
     %Distribution{}
     |> Distribution.changeset(attrs)
+    |> put_created_by(user)
     |> Repo.insert()
   end
+
+  defp put_created_by(changeset, %User{} = user),
+    do: Ecto.Changeset.put_change(changeset, :created_by_id, user.id)
+
+  defp put_created_by(changeset, nil), do: changeset
 
   def update_distribution(%Distribution{} = distribution, attrs) do
     with :ok <- ensure_drafted(distribution) do
@@ -50,21 +67,59 @@ defmodule BonusCalculatorBackend.Distributions do
     end
   end
 
-  def finalize_distribution(%Distribution{status: "drafted"} = distribution) do
-    distribution
-    |> Distribution.status_changeset("finalized")
-    |> Repo.update()
+  def finalize_distribution(distribution, user \\ nil)
+
+  def finalize_distribution(%Distribution{status: "drafted"} = distribution, user) do
+    Repo.transaction(fn ->
+      distribution =
+        distribution
+        |> Distribution.status_changeset("finalized", %{
+          finalized_by_id: user && user.id,
+          finalized_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+        |> Repo.update!()
+
+      snapshot_shareholders(distribution)
+
+      Repo.preload(distribution, @audit_assocs)
+    end)
   end
 
-  def finalize_distribution(%Distribution{}), do: {:error, :invalid_transition}
+  def finalize_distribution(%Distribution{}, _user), do: {:error, :invalid_transition}
 
-  def mark_paid_distribution(%Distribution{status: "finalized"} = distribution) do
+  def mark_paid_distribution(distribution, user \\ nil)
+
+  def mark_paid_distribution(%Distribution{status: "finalized"} = distribution, user) do
     distribution
-    |> Distribution.status_changeset("paid_out")
+    |> Distribution.status_changeset("paid_out", %{
+      paid_out_by_id: user && user.id,
+      paid_out_at: DateTime.utc_now() |> DateTime.truncate(:second)
+    })
     |> Repo.update()
+    |> case do
+      {:ok, distribution} -> {:ok, Repo.preload(distribution, @audit_assocs)}
+      other -> other
+    end
   end
 
-  def mark_paid_distribution(%Distribution{}), do: {:error, :invalid_transition}
+  def mark_paid_distribution(%Distribution{}, _user), do: {:error, :invalid_transition}
+
+  # Freezes the current shareholders table into snapshot rows so later
+  # share-count changes cannot rewrite a finalized distribution's dividends.
+  defp snapshot_shareholders(distribution) do
+    for shareholder <- People.list_shareholders() do
+      %DistributionShareholder{}
+      |> DistributionShareholder.changeset(%{
+        distribution_id: distribution.id,
+        shareholder_id: shareholder.id,
+        name: shareholder.name,
+        shares: shareholder.shares
+      })
+      |> Repo.insert!()
+    end
+
+    :ok
+  end
 
   @doc """
   Snapshots an employee group into a distribution: copies the group name and
