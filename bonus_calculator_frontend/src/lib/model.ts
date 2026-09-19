@@ -20,9 +20,14 @@ export interface Shareholder {
   employeeId: UUID | null
 }
 
+export type EmployeeClassification = 'full_time' | 'contractual' | 'professional'
+
 export interface Employee {
   id: UUID
   name: string
+  classification: EmployeeClassification | null
+  archived: boolean
+  archivedAt: string | null
 }
 
 export interface EmployeeGroup {
