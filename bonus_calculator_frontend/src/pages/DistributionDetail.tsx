@@ -162,6 +162,7 @@ function DraftEditor({ dist }: { dist: Distribution }) {
   const allocTotal = dist.groups.reduce((s, g) => s + g.allocationPct, 0)
   const addableGroups = db.groups.filter((g) => !dist.groups.some((dg) => dg.groupId === g.id))
   const totalBudget = dist.bonusBudget + (dist.includeShareholders ? dist.dividendBudget : 0)
+  const totalSpecialBonuses = dist.specialBonuses.reduce((s, b) => s + b.amount, 0)
   const totalShares = preview.dividends.reduce((s, d) => s + d.shares, 0)
   const totalOwnership = preview.dividends.reduce((s, d) => s + d.pct, 0)
 
@@ -184,9 +185,14 @@ function DraftEditor({ dist }: { dist: Distribution }) {
               </label>
             )}
             <div>
+              <span className="kicker mb-1.5 block">Total special bonuses</span>
+              <div className="num flex h-10 items-center text-lg font-semibold">{peso(totalSpecialBonuses)}</div>
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">Sum of the special bonuses pool below, read-only.</p>
+            </div>
+            <div>
               <span className="kicker mb-1.5 block">Total budget</span>
-              <div className="num flex h-10 items-center text-lg font-semibold">{peso(totalBudget)}</div>
-              <p className="mt-1 text-[0.6875rem] text-muted-foreground">Bonus + dividends, read-only.</p>
+              <div className="num flex h-10 items-center text-lg font-semibold">{peso(totalBudget + totalSpecialBonuses)}</div>
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">Bonus + dividends + special bonuses, read-only.</p>
             </div>
           </div>
           <div className="space-y-4">
@@ -512,6 +518,14 @@ function SpecialBonuses({ dist }: { dist: Distribution }) {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr>
+                <td className="font-semibold">Total</td>
+                <td />
+                <td className="r"><Money value={dist.specialBonuses.reduce((s, b) => s + b.amount, 0)} className="font-semibold" /></td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
