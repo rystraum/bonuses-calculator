@@ -32,9 +32,9 @@ export default function Handoff() {
 
   useEffect(() => {
     if (!dist) return
-    document.title = `Name: ${dist.name} · Generated At: ${generatedAt}`
+    document.title = `${dist.name.replace(/\s+/g, '_')}_${format(now, 'yyyyMMdd_HHmm')}`
     return () => { document.title = 'Bonus & Dividend Calculator' }
-  }, [dist, generatedAt])
+  }, [dist, now])
 
   if (!dist) {
     if (store.bootstrapping) {
