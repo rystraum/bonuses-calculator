@@ -70,7 +70,7 @@ export default function Handoff() {
   const printHeader = (
     <div className="mb-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b pb-2">
       <div>
-        <div className="font-display text-lg font-semibold tracking-tight">Name: {dist.name}</div>
+        <div className="font-display text-lg font-semibold tracking-tight">{dist.name}</div>
         <div className="text-xs text-muted-foreground">
           Generated At: <span className="font-medium text-foreground">{generatedAt}</span>
         </div>
@@ -144,7 +144,7 @@ export default function Handoff() {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(14)
       doc.setTextColor(28, 25, 23)
-      doc.text(`Name: ${dist.name}`, 14, 15)
+      doc.text(dist.name, 14, 15)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(9)
       doc.setTextColor(120, 113, 108)
@@ -245,7 +245,7 @@ export default function Handoff() {
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b pb-3">
           <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight">Name: {dist.name}</h1>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">{dist.name}</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               Generated At: <span className="font-medium text-foreground">{generatedAt}</span>
             </p>
