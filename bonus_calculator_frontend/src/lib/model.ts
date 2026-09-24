@@ -157,6 +157,48 @@ export interface Distribution {
   result: DistributionResult | null // set for finalized / paid_out distributions
 }
 
+// ─── suggestion sets ──────────────────────────────────────────────────────────
+// A non-owner's proposed edits to a draft. Only fields that differ from the
+// base distribution are recorded; the wire shape is the snake_case mirror (see
+// changesToWire / mapApiChanges in lib/store.tsx).
+
+export interface SuggestedSpecialBonus {
+  employeeId: UUID | null
+  name: string
+  amount: number
+  note: string
+}
+
+export interface SuggestionChanges {
+  distribution: {
+    bonusBudget?: number
+    dividendBudget?: number
+    impactPct?: number // effort = 100 - impact
+  }
+  groups: Record<UUID, {
+    allocationPct?: number
+    impactWeight?: number
+    effortWeight?: number
+  }>
+  members: Record<UUID, {
+    hours?: number
+    multiplier?: number
+    note?: string | null
+  }>
+  specialBonuses: SuggestedSpecialBonus[] // additions only
+}
+
+export const EMPTY_CHANGES: SuggestionChanges = { distribution: {}, groups: {}, members: {}, specialBonuses: [] }
+
+export interface Suggestion {
+  id: UUID
+  user: { id: UUID; username: string }
+  explanation: string
+  changes: SuggestionChanges
+  insertedAt: string
+  updatedAt: string
+}
+
 export interface DB {
   users: User[]
   shareholders: Shareholder[]
