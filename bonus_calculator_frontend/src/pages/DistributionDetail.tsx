@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, CheckCheck, Lock, Plus, Share2, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
