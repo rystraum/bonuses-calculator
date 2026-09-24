@@ -8,6 +8,7 @@ import { AppShell, Money, NoteInput, NumInput, SectionHeader, StatusBadge } from
 import SummaryView from '@/components/SummaryView'
 import SuggestionEditor, { SubmitSuggestionButton } from '@/components/SuggestionEditor'
 import SuggestionsSection, { SuggestionMark, SuggestionViewDialog } from '@/components/SuggestionsSection'
+import ApprovalControl, { ApprovalsSection } from '@/components/ApprovalsSection'
 import { collectMarks, useSuggestionChanges } from '@/lib/suggestions'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -25,16 +26,17 @@ const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy
 export default function DistributionDetail() {
   const { id } = useParams<{ id: string }>()
   const store = useStore()
-  const { refreshDistribution, loadSuggestions } = store
+  const { refreshDistribution, loadSuggestions, loadApprovals } = store
   const dist = store.db.distributions.find((d) => d.id === id)
 
-  // Fresh snapshot + computation + suggestions whenever this page is opened.
+  // Fresh snapshot + computation + suggestions + approvals whenever this page is opened.
   useEffect(() => {
     if (id) {
       refreshDistribution(id).catch(() => {})
       loadSuggestions(id).catch(() => {})
+      loadApprovals(id).catch(() => {})
     }
-  }, [refreshDistribution, loadSuggestions, id])
+  }, [refreshDistribution, loadSuggestions, loadApprovals, id])
 
   if (!dist) {
     // First render after a refresh has an empty db until the initial load
@@ -94,7 +96,12 @@ function DetailContent({ dist }: { dist: Distribution }) {
           <div className="flex gap-2">
             {dist.status === 'drafted' && (isOwner
               ? <FinalizeButton dist={dist} />
-              : <SubmitSuggestionButton dist={dist} state={suggestionState} />)}
+              : (
+                <>
+                  <SubmitSuggestionButton dist={dist} state={suggestionState} />
+                  <ApprovalControl dist={dist} />
+                </>
+              ))}
             {dist.status === 'finalized' && <HandoffButton dist={dist} />}
             {dist.status === 'finalized' && isOwner && (
               <AlertDialog>
@@ -125,6 +132,7 @@ function DetailContent({ dist }: { dist: Distribution }) {
             ? <DraftEditor dist={dist} onViewSuggestion={setViewSuggestionId} />
             : <SuggestionEditor dist={dist} state={suggestionState} />}
           <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
+          {isOwner && <ApprovalsSection dist={dist} />}
         </div>
       ) : (
         <SummaryView dist={dist} />
