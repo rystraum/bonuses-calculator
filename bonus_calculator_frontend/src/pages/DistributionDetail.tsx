@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { ArrowLeft, CheckCheck, Lock, Plus, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
@@ -369,19 +370,30 @@ function DraftEditor({ dist }: { dist: Distribution }) {
 
 // ─── member note / group weights ─────────────────────────────────────────────
 
-/** Text encoding input: local string state while focused, commits on blur / Enter. */
+/** Multiline note: auto-expanding textarea, local state while focused, commits on blur. */
 function NoteInput({ value, onCommit }: { value: string | null; onCommit: (note: string | null) => void }) {
   const [text, setText] = useState(value ?? '')
   const [focused, setFocused] = useState(false)
   const [lastValue, setLastValue] = useState(value)
+  const ref = useRef<HTMLTextAreaElement>(null)
   if (!focused && value !== lastValue) {
     setLastValue(value)
     setText(value ?? '')
   }
 
+  // Grow to fit content (covers browsers without CSS field-sizing: content).
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
   return (
-    <Input
-      className="h-8 min-w-40 text-xs"
+    <Textarea
+      ref={ref}
+      rows={1}
+      className="min-h-8 min-w-40 resize-none overflow-hidden px-2 py-1.5 text-xs"
       placeholder="Rating justification"
       value={text}
       onFocus={() => setFocused(true)}
@@ -391,7 +403,6 @@ function NoteInput({ value, onCommit }: { value: string | null; onCommit: (note:
         const next = text.trim() || null
         if (next !== value) onCommit(next)
       }}
-      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
     />
   )
 }
