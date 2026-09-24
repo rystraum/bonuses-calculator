@@ -86,6 +86,7 @@ defmodule BonusCalculatorBackend.Distributions do
       distribution
       |> Distribution.changeset(attrs)
       |> Repo.update()
+      |> tap_ok_rescind(distribution)
     end
   end
 
@@ -187,6 +188,7 @@ defmodule BonusCalculatorBackend.Distributions do
           |> Repo.insert!()
         end
 
+        rescind_all_approvals(distribution)
         Repo.preload(dist_group, :members)
       end)
     else
@@ -212,6 +214,7 @@ defmodule BonusCalculatorBackend.Distributions do
       dist_group
       |> DistributionGroup.update_changeset(attrs)
       |> Repo.update()
+      |> tap_ok_rescind(dist_group.distribution)
     end
   end
 
@@ -220,7 +223,9 @@ defmodule BonusCalculatorBackend.Distributions do
 
     with :ok <- ensure_drafted(dist_group.distribution),
          :ok <- ensure_owner(dist_group.distribution, user) do
-      Repo.delete(dist_group)
+      dist_group
+      |> Repo.delete()
+      |> tap_ok_rescind(dist_group.distribution)
     end
   end
 
@@ -238,6 +243,7 @@ defmodule BonusCalculatorBackend.Distributions do
       member
       |> DistributionGroupMember.update_changeset(attrs)
       |> Repo.update()
+      |> tap_ok_rescind(member.distribution_group.distribution)
     end
   end
 
@@ -259,6 +265,7 @@ defmodule BonusCalculatorBackend.Distributions do
         name: attrs["name"]
       })
       |> Repo.insert()
+      |> tap_ok_rescind(distribution)
     end
   end
 
@@ -267,8 +274,25 @@ defmodule BonusCalculatorBackend.Distributions do
 
     with :ok <- ensure_drafted(special_bonus.distribution),
          :ok <- ensure_owner(special_bonus.distribution, user) do
-      Repo.delete(special_bonus)
+      special_bonus
+      |> Repo.delete()
+      |> tap_ok_rescind(special_bonus.distribution)
     end
+  end
+
+  # Any owner edit to a drafted distribution invalidates prior sign-offs:
+  # approvals captured before the change no longer describe the current
+  # numbers, so reviewers must approve again.
+  defp tap_ok_rescind({:ok, _} = result, %Distribution{} = distribution) do
+    rescind_all_approvals(distribution)
+    result
+  end
+
+  defp tap_ok_rescind(other, %Distribution{}), do: other
+
+  defp rescind_all_approvals(%Distribution{} = distribution) do
+    Repo.delete_all(from a in DistributionApproval, where: a.distribution_id == ^distribution.id)
+    :ok
   end
 
   defp ensure_drafted(%Distribution{status: "drafted"}), do: :ok

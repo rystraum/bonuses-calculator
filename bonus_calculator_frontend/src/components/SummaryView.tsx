@@ -1,15 +1,45 @@
+import { useEffect } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { peso, pct, type Distribution } from '@/lib/model'
+import { peso, pct, fmtDateTime, type Distribution } from '@/lib/model'
+import { useStore } from '@/lib/store'
 import { Money, SectionHeader } from '@/components/chrome'
 import { cn } from '@/lib/utils'
 
-/** Read-only finalized summary: dividends → per group → per person → totals. */
+/** Read-only finalized summary: approvals → dividends → per group → per person → totals. */
 export default function SummaryView({ dist }: { dist: Distribution }) {
+  const store = useStore()
   const r = dist.result
+
+  useEffect(() => {
+    store.loadApprovals(dist.id).catch(() => {})
+  }, [store, dist.id])
+
+  const approvals = store.approvals[dist.id] ?? []
   if (!r) return null
 
   return (
     <div className="space-y-10">
+      {/* approvals collected while this was a draft */}
+      {approvals.length > 0 && (
+        <section>
+          <SectionHeader title="Approvals" hint="Sign-offs collected while this distribution was a draft" />
+          <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+            <table className="ledger">
+              <thead>
+                <tr><th>User</th><th>Approved</th></tr>
+              </thead>
+              <tbody>
+                {approvals.map((a) => (
+                  <tr key={a.id}>
+                    <td className="font-medium">{a.user.username}</td>
+                    <td className="text-muted-foreground">{fmtDateTime(a.approvedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       {/* dividends */}
       {dist.includeShareholders && (
         <section>

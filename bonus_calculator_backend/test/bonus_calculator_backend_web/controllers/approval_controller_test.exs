@@ -232,4 +232,80 @@ defmodule BonusCalculatorBackendWeb.ApprovalControllerTest do
       assert %{"error" => "unauthorized"} = json_response(conn, 401)
     end
   end
+
+  describe "edits rescind approvals" do
+    test "owner edit clears everyone else's approvals", %{
+      other: other,
+      owner: owner,
+      distribution: distribution
+    } do
+      {:ok, _} = Distributions.approve_distribution(distribution, other, "selfie")
+      assert length(Distributions.list_approvals(distribution)) == 1
+
+      {:ok, _} =
+        Distributions.update_distribution(distribution, %{"bonus_budget" => "20000"}, owner)
+
+      assert Distributions.list_approvals(distribution) == []
+    end
+
+    test "member, group, and special bonus edits clear approvals", %{
+      other: other,
+      owner: owner,
+      distribution: distribution
+    } do
+      alias BonusCalculatorBackend.{Groups, People}
+
+      {:ok, employee} = People.create_employee(%{"name" => "Alice"})
+      {:ok, group} = Groups.create_employee_group(%{"name" => "Engineering"})
+      {:ok, _} = Groups.add_member(group, employee.id)
+
+      {:ok, dist_group} =
+        Distributions.add_group(distribution, %{"employee_group_id" => group.id}, owner)
+
+      rescinds = fn fun ->
+        {:ok, _} = Distributions.approve_distribution(distribution, other, "selfie")
+        assert length(Distributions.list_approvals(distribution)) == 1
+        fun.()
+        assert Distributions.list_approvals(distribution) == []
+      end
+
+      member = hd(Distributions.get_distribution_group!(dist_group.id).members)
+
+      rescinds.(fn ->
+        {:ok, _} = Distributions.update_member(member, %{"hours" => "10"}, owner)
+      end)
+
+      rescinds.(fn ->
+        {:ok, _} =
+          Distributions.update_distribution_group(dist_group, %{"allocation_pct" => "10"}, owner)
+      end)
+
+      rescinds.(fn ->
+        {:ok, bonus} =
+          Distributions.add_special_bonus(
+            distribution,
+            %{"employee_id" => employee.id, "amount" => "500"},
+            owner
+          )
+
+        {:ok, _} = Distributions.delete_special_bonus(bonus, owner)
+        assert Distributions.list_approvals(distribution) == []
+      end)
+
+      rescinds.(fn ->
+        {:ok, _} = Distributions.delete_distribution_group(dist_group, owner)
+      end)
+    end
+
+    test "finalizing keeps approvals as the permanent record", %{
+      other: other,
+      owner: owner,
+      distribution: distribution
+    } do
+      {:ok, _} = Distributions.approve_distribution(distribution, other, "selfie")
+      {:ok, _} = Distributions.finalize_distribution(distribution, owner)
+
+      assert [%{user: %{username: "other"}}] = Distributions.list_approvals(distribution)
+    end
+  end
 end
