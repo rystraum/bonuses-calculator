@@ -283,6 +283,8 @@ interface StoreCtx {
   sessionUserId: UUID | null
   login: (username: string, password: string) => Promise<string | null>
   logout: () => void
+  /** PATCHes the current user's username/password; resolves to an error message or null. */
+  updateAccount: (patch: { username?: string; password?: string }) => Promise<string | null>
   refreshDistribution: (id: UUID) => Promise<void>
   /** Cached if present, otherwise fetched and cached. */
   getComputation: (id: UUID) => Promise<DistributionResult>
@@ -485,6 +487,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const api = useMemo<StoreCtx>(() => ({
     db, computations, sessionUserId,
     login, logout, refreshDistribution, getComputation,
+
+    updateAccount: async (patch) => {
+      try {
+        await apiFetch('/user', { method: 'PATCH', body: patch })
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Something went wrong.'
+      }
+    },
 
     addShareholder: (name, shares, employeeId) =>
       run(() => apiFetch('/shareholders', { method: 'POST', body: { name, shares, employee_id: employeeId } }), reloadCore),

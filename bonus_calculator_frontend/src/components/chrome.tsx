@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink, Navigate, useLocation, useNavigate } from 'react-router'
 import {
-  Banknote, Coins, GitCompareArrows, LogOut, Upload, UserRound, UsersRound, Wallet,
+  Banknote, Coins, GitCompareArrows, LogOut, Settings2, Upload, UserRound, UsersRound, Wallet,
 } from 'lucide-react'
 import { peso, type DistributionStatus } from '@/lib/model'
 import { useStore } from '@/lib/store'
@@ -140,15 +140,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto space-y-1 border-t pt-3">
-          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
-            <span className="flex min-w-0 items-center gap-2 text-sm">
-              <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium">{user?.name}</span>
-            </span>
-            <button onClick={() => { logout(); navigate('/login') }} title="Sign out"
-              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <LogOut className="h-4 w-4" />
+        <div className="mt-auto space-y-2 border-t pt-3">
+          <div className="flex items-center gap-2 px-2.5">
+            <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-sm font-medium" title={user?.name}>{user?.name}</span>
+          </div>
+          <div className="flex gap-1.5 px-1.5 pb-0.5">
+            <button
+              onClick={() => navigate('/settings')}
+              title="Settings"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Settings
+            </button>
+            <button
+              onClick={() => { logout(); navigate('/login') }}
+              title="Sign out"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Logout
             </button>
           </div>
         </div>
@@ -168,6 +180,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
           </nav>
+          <span className="flex items-center gap-1">
+            <button onClick={() => navigate('/settings')} title="Settings"
+              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <Settings2 className="h-4 w-4" />
+            </button>
+            <button onClick={() => { logout(); navigate('/login') }} title="Sign out"
+              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </span>
         </div>
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8 lg:px-10">{children}</main>
       </div>
