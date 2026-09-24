@@ -27,7 +27,7 @@ defmodule BonusCalculatorBackendWeb.DistributionController do
     distribution = Distributions.get_distribution!(id)
 
     with {:ok, %Distribution{} = distribution} <-
-           Distributions.update_distribution(distribution, params) do
+           Distributions.update_distribution(distribution, params, conn.assigns.current_user) do
       json(conn, %{data: full_json(Distributions.get_distribution_full!(distribution.id))})
     end
   end
@@ -35,7 +35,8 @@ defmodule BonusCalculatorBackendWeb.DistributionController do
   def delete(conn, %{"id" => id}) do
     distribution = Distributions.get_distribution!(id)
 
-    with {:ok, %Distribution{}} <- Distributions.delete_distribution(distribution) do
+    with {:ok, %Distribution{}} <-
+           Distributions.delete_distribution(distribution, conn.assigns.current_user) do
       json(conn, %{data: %{id: id}})
     end
   end

@@ -9,7 +9,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupController do
   def create(conn, %{"id" => id} = params) do
     distribution = Distributions.get_distribution!(id)
 
-    with {:ok, %DistributionGroup{} = group} <- Distributions.add_group(distribution, params) do
+    with {:ok, %DistributionGroup{} = group} <-
+           Distributions.add_group(distribution, params, conn.assigns.current_user) do
       conn
       |> put_status(:created)
       |> json(%{data: group_json(group)})
@@ -20,7 +21,7 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupController do
     group = Distributions.get_distribution_group!(id)
 
     with {:ok, %DistributionGroup{} = group} <-
-           Distributions.update_distribution_group(group, params) do
+           Distributions.update_distribution_group(group, params, conn.assigns.current_user) do
       json(conn, %{data: group_json(group)})
     end
   end
@@ -28,7 +29,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupController do
   def delete(conn, %{"id" => id}) do
     group = Distributions.get_distribution_group!(id)
 
-    with {:ok, %DistributionGroup{}} <- Distributions.delete_distribution_group(group) do
+    with {:ok, %DistributionGroup{}} <-
+           Distributions.delete_distribution_group(group, conn.assigns.current_user) do
       json(conn, %{data: %{id: id}})
     end
   end

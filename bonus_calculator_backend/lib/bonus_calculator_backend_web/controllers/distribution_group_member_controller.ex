@@ -9,7 +9,8 @@ defmodule BonusCalculatorBackendWeb.DistributionGroupMemberController do
   def update(conn, %{"id" => id} = params) do
     member = Distributions.get_member!(id)
 
-    with {:ok, %DistributionGroupMember{} = member} <- Distributions.update_member(member, params) do
+    with {:ok, %DistributionGroupMember{} = member} <-
+           Distributions.update_member(member, params, conn.assigns.current_user) do
       json(conn, %{
         data: %{
           id: member.id,

@@ -10,7 +10,7 @@ defmodule BonusCalculatorBackendWeb.SpecialBonusController do
     distribution = Distributions.get_distribution!(id)
 
     with {:ok, %DistributionSpecialBonus{} = bonus} <-
-           Distributions.add_special_bonus(distribution, params) do
+           Distributions.add_special_bonus(distribution, params, conn.assigns.current_user) do
       bonus = BonusCalculatorBackend.Repo.preload(bonus, :employee)
 
       conn
@@ -22,7 +22,8 @@ defmodule BonusCalculatorBackendWeb.SpecialBonusController do
   def delete(conn, %{"id" => id}) do
     bonus = Distributions.get_special_bonus!(id)
 
-    with {:ok, %DistributionSpecialBonus{}} <- Distributions.delete_special_bonus(bonus) do
+    with {:ok, %DistributionSpecialBonus{}} <-
+           Distributions.delete_special_bonus(bonus, conn.assigns.current_user) do
       json(conn, %{data: %{id: id}})
     end
   end
