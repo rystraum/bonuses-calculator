@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
-  DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, UUID,
+  DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, Suggestion,
+  SuggestionChanges, UUID,
 } from './model'
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -101,6 +102,18 @@ interface ApiSpecialBonus {
   name: string | null; amount: string; note: string | null
 }
 interface ApiUserRef { id: string; username: string }
+interface ApiSuggestion {
+  id: string; distribution_id: string; user: ApiUserRef
+  explanation: string; changes: ApiSuggestionChanges
+  inserted_at: string; updated_at: string
+}
+// Raw jsonb as stored: snake_case, only fields differing from the base.
+interface ApiSuggestionChanges {
+  distribution?: { bonus_budget?: unknown; dividends_budget?: unknown; impact_weight?: unknown; effort_weight?: unknown }
+  groups?: Record<string, { allocation_pct?: unknown; impact_weight?: unknown; effort_weight?: unknown }>
+  members?: Record<string, { hours?: unknown; performance_multiplier?: unknown; note?: string | null }>
+  special_bonuses?: { employee_id?: string | null; name?: string; amount?: unknown; note?: string | null }[]
+}
 interface ApiDistribution {
   id: string; name: string; description: string | null; status: Distribution['status']
   include_shareholders: boolean; bonus_budget: string; dividends_budget: string
@@ -262,6 +275,98 @@ function mapComputation(data: ApiComputation): DistributionResult {
 
 const EMPTY_DB: DB = { users: [], shareholders: [], employees: [], groups: [], distributions: [] }
 
+// ─── suggestion changes: wire (snake_case jsonb) ↔ UI model (camelCase) ──────
+
+function mapApiChanges(raw: ApiSuggestionChanges | null | undefined): SuggestionChanges {
+  const changes: SuggestionChanges = { distribution: {}, groups: {}, members: {}, specialBonuses: [] }
+  if (!raw) return changes
+  const d = raw.distribution ?? {}
+  if (d.bonus_budget !== undefined) changes.distribution.bonusBudget = num(d.bonus_budget)
+  if (d.dividends_budget !== undefined) changes.distribution.dividendBudget = num(d.dividends_budget)
+  if (d.impact_weight !== undefined) changes.distribution.impactPct = num(d.impact_weight)
+  for (const [gid, g] of Object.entries(raw.groups ?? {})) {
+    const entry: SuggestionChanges['groups'][string] = {}
+    if (g.allocation_pct !== undefined) entry.allocationPct = num(g.allocation_pct)
+    if (g.impact_weight !== undefined) entry.impactWeight = num(g.impact_weight)
+    if (g.effort_weight !== undefined) entry.effortWeight = num(g.effort_weight)
+    changes.groups[gid] = entry
+  }
+  for (const [mid, m] of Object.entries(raw.members ?? {})) {
+    const entry: SuggestionChanges['members'][string] = {}
+    if (m.hours !== undefined) entry.hours = num(m.hours)
+    if (m.performance_multiplier !== undefined) entry.multiplier = num(m.performance_multiplier)
+    if (m.note !== undefined) entry.note = m.note ?? null
+    changes.members[mid] = entry
+  }
+  changes.specialBonuses = (raw.special_bonuses ?? []).map((b) => ({
+    employeeId: b.employee_id ?? null,
+    name: b.name ?? '—',
+    amount: num(b.amount),
+    note: b.note ?? '',
+  }))
+  return changes
+}
+
+function mapSuggestion(s: ApiSuggestion): Suggestion {
+  return {
+    id: s.id,
+    user: s.user,
+    explanation: s.explanation,
+    changes: mapApiChanges(s.changes),
+    insertedAt: s.inserted_at,
+    updatedAt: s.updated_at,
+  }
+}
+
+/** UI model → snake_case wire shape accepted by simulate / suggestion upsert. */
+export function changesToWire(changes: SuggestionChanges): Record<string, unknown> {
+  const wire: Record<string, unknown> = {}
+  const d: Record<string, unknown> = {}
+  if (changes.distribution.bonusBudget !== undefined) d.bonus_budget = changes.distribution.bonusBudget
+  if (changes.distribution.dividendBudget !== undefined) d.dividends_budget = changes.distribution.dividendBudget
+  if (changes.distribution.impactPct !== undefined) {
+    d.impact_weight = changes.distribution.impactPct
+    d.effort_weight = 100 - changes.distribution.impactPct
+  }
+  if (Object.keys(d).length > 0) wire.distribution = d
+
+  const groups: Record<string, unknown> = {}
+  for (const [gid, g] of Object.entries(changes.groups)) {
+    const entry: Record<string, unknown> = {}
+    if (g.allocationPct !== undefined) entry.allocation_pct = g.allocationPct
+    if (g.impactWeight !== undefined) entry.impact_weight = g.impactWeight
+    if (g.effortWeight !== undefined) entry.effort_weight = g.effortWeight
+    if (Object.keys(entry).length > 0) groups[gid] = entry
+  }
+  if (Object.keys(groups).length > 0) wire.groups = groups
+
+  const members: Record<string, unknown> = {}
+  for (const [mid, m] of Object.entries(changes.members)) {
+    const entry: Record<string, unknown> = {}
+    if (m.hours !== undefined) entry.hours = m.hours
+    if (m.multiplier !== undefined) entry.performance_multiplier = m.multiplier
+    if (m.note !== undefined) entry.note = m.note
+    if (Object.keys(entry).length > 0) members[mid] = entry
+  }
+  if (Object.keys(members).length > 0) wire.members = members
+
+  if (changes.specialBonuses.length > 0) {
+    wire.special_bonuses = changes.specialBonuses.map((b) => ({
+      employee_id: b.employeeId,
+      name: b.name,
+      amount: b.amount,
+      note: b.note || null,
+    }))
+  }
+  return wire
+}
+
+export const countChanges = (changes: SuggestionChanges): number =>
+  Object.keys(changes.distribution).length
+  + Object.values(changes.groups).reduce((s, g) => s + Object.keys(g).length, 0)
+  + Object.values(changes.members).reduce((s, m) => s + Object.keys(m).length, 0)
+  + changes.specialBonuses.length
+
 // Read once at module load so React state can be initialized lazily (a render
 // must not read localStorage itself).
 const storedSession = ((): { id: string; username: string } | null => {
@@ -280,6 +385,9 @@ const storedSession = ((): { id: string; username: string } | null => {
 interface StoreCtx {
   db: DB
   computations: Record<UUID, DistributionResult>
+  suggestions: Record<UUID, Suggestion[]>
+  /** Live previews of in-progress suggestion edits, keyed by distribution id. */
+  simulations: Record<UUID, DistributionResult>
   sessionUserId: UUID | null
   /** True while a persisted session's initial data load is still in flight. */
   bootstrapping: boolean
@@ -290,6 +398,18 @@ interface StoreCtx {
   refreshDistribution: (id: UUID) => Promise<void>
   /** Cached if present, otherwise fetched and cached. */
   getComputation: (id: UUID) => Promise<DistributionResult>
+  // suggestions
+  loadSuggestions: (distId: UUID) => Promise<void>
+  /** Debounced (~300ms) live preview of proposed changes; writes `simulations[distId]`. */
+  simulate: (distId: UUID, changes: SuggestionChanges) => void
+  /** Fetches one suggestion plus its simulated computation. */
+  fetchSuggestion: (suggestionId: UUID) => Promise<{ suggestion: Suggestion; computation: DistributionResult }>
+  /** Upserts the current user's suggestion set; resolves to an error message or null. */
+  submitSuggestion: (distId: UUID, explanation: string, changes: SuggestionChanges) => Promise<string | null>
+  deleteSuggestion: (distId: UUID, suggestionId: UUID) => Promise<string | null>
+  // users
+  loadUsers: () => Promise<void>
+  createUser: (username: string, password: string) => Promise<string | null>
   // admin
   addShareholder: (name: string, shares: number, employeeId: UUID | null) => Promise<string | null>
   updateShareholder: (id: UUID, patch: Partial<{ name: string; shares: number; employeeId: UUID | null }>) => Promise<string | null>
@@ -345,6 +465,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
   const [bootstrapping, setBootstrapping] = useState(() => storedSession !== null)
   const [computations, setComputations] = useState<Record<UUID, DistributionResult>>({})
+  const [suggestions, setSuggestions] = useState<Record<UUID, Suggestion[]>>({})
+  const [simulations, setSimulations] = useState<Record<UUID, DistributionResult>>({})
   const [sessionUserId, setSessionUserId] = useState<UUID | null>(storedSession?.id ?? null)
   const [seedImportResult, setSeedImportResult] = useState<SeedImportResult | null>(null)
   const dbRef = useRef(db)
@@ -352,6 +474,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const computationsRef = useRef(computations)
   useEffect(() => { computationsRef.current = computations }, [computations])
   const refreshTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const simulateTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const fetchDistFull = useCallback(async (id: UUID) => {
     const [full, comp] = await Promise.all([
@@ -375,7 +498,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         : [dist, ...prev.distributions],
     }))
     setComputations((prev) => ({ ...prev, [id]: result }))
+    // The base moved; any cached suggestion simulation is stale.
+    setSimulations((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
   }, [fetchDistFull])
+
+  const loadSuggestions = useCallback(async (distId: UUID) => {
+    const list = await apiFetch<ApiSuggestion[]>(`/distributions/${distId}/suggestions`)
+    setSuggestions((prev) => ({ ...prev, [distId]: list.map(mapSuggestion) }))
+  }, [])
+
+  // Debounced live preview while composing a suggestion (~300ms).
+  const simulate = useCallback((distId: UUID, changes: SuggestionChanges) => {
+    clearTimeout(simulateTimers.current[distId])
+    simulateTimers.current[distId] = setTimeout(() => {
+      apiFetch<ApiComputation>(`/distributions/${distId}/simulate`, {
+        method: 'POST',
+        body: { changes: changesToWire(changes) },
+      })
+        .then((comp) => setSimulations((prev) => ({ ...prev, [distId]: mapComputation(comp) })))
+        .catch(() => {})
+    }, 300)
+  }, [])
+
+  const fetchSuggestion = useCallback(async (suggestionId: UUID) => {
+    const data = await apiFetch<{ suggestion: ApiSuggestion; computation: ApiComputation }>(`/suggestions/${suggestionId}`)
+    return { suggestion: mapSuggestion(data.suggestion), computation: mapComputation(data.computation) }
+  }, [])
+
+  const loadUsers = useCallback(async () => {
+    const users = await apiFetch<ApiUserRef[]>('/users')
+    setDb((prev) => ({
+      ...prev,
+      users: users.map((u) => ({ id: u.id, username: u.username, password: '', name: u.username })),
+    }))
+  }, [])
 
   const getComputation = useCallback(async (id: UUID): Promise<DistributionResult> => {
     const cached = computationsRef.current[id]
@@ -425,6 +586,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSessionUserId(null)
     setDb(EMPTY_DB)
     setComputations({})
+    setSuggestions({})
+    setSimulations({})
     setBootstrapping(false)
   }, [])
 
@@ -489,12 +652,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setSessionUserId(null)
       setDb(EMPTY_DB)
       setComputations({})
+      setSuggestions({})
+      setSimulations({})
     })
   }, [])
 
   const api = useMemo<StoreCtx>(() => ({
-    db, computations, sessionUserId, bootstrapping,
+    db, computations, suggestions, simulations, sessionUserId, bootstrapping,
     login, logout, refreshDistribution, getComputation,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers,
+
+    submitSuggestion: async (distId, explanation, changes) => {
+      try {
+        await apiFetch<ApiSuggestion>(`/distributions/${distId}/suggestion`, {
+          method: 'POST',
+          body: { explanation, changes: changesToWire(changes) },
+        })
+        setSimulations((prev) => {
+          const next = { ...prev }
+          delete next[distId]
+          return next
+        })
+        await loadSuggestions(distId)
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : 'Something went wrong.'
+      }
+    },
+    deleteSuggestion: (distId, suggestionId) =>
+      run(() => apiFetch(`/suggestions/${suggestionId}`, { method: 'DELETE' }), () => loadSuggestions(distId)),
+
+    createUser: (username, password) =>
+      run(
+        () => apiFetch('/users', { method: 'POST', body: { username: username.trim(), password } }),
+        loadUsers,
+      ),
 
     updateAccount: async (patch) => {
       try {
@@ -681,8 +873,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
   }), [
-    db, computations, sessionUserId, bootstrapping, login, logout, seedImportResult,
+    db, computations, suggestions, simulations, sessionUserId, bootstrapping, login, logout, seedImportResult,
     refreshDistribution, getComputation, reloadCore, reloadDistributions, loadAll, run, scheduleRefresh,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers,
   ])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
