@@ -23,6 +23,30 @@ defmodule BonusCalculatorBackend.Accounts.User do
     |> hash_password()
   end
 
+  @doc """
+  Changeset for account self-service: username is required (kept from data
+  when not being changed), password is optional and hashed when present.
+  """
+  def settings_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:username, :password])
+    |> validate_required([:username])
+    |> validate_changed_username()
+    |> validate_length(:password, min: 6)
+    |> unique_constraint(:username)
+    |> hash_password()
+  end
+
+  defp validate_changed_username(changeset) do
+    if get_change(changeset, :username) do
+      validate_format(changeset, :username, ~r/^[^@\s]+@[^@\s]+$/,
+        message: "must be a valid email address"
+      )
+    else
+      changeset
+    end
+  end
+
   defp hash_password(changeset) do
     case get_change(changeset, :password) do
       nil -> changeset

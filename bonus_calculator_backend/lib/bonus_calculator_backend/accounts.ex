@@ -14,6 +14,12 @@ defmodule BonusCalculatorBackend.Accounts do
     |> Repo.insert()
   end
 
+  def update_user(%User{} = user, attrs) do
+    user
+    |> User.settings_changeset(attrs)
+    |> Repo.update()
+  end
+
   def get_user_by_username(username) do
     Repo.get_by(User, username: username)
   end

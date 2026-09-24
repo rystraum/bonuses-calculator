@@ -20,6 +20,8 @@ defmodule BonusCalculatorBackendWeb.Router do
 
     delete "/session", SessionController, :delete
 
+    patch "/user", UserController, :update
+
     resources "/employees", EmployeeController, except: [:new, :edit]
     resources "/shareholders", ShareholderController, except: [:new, :edit]
 
