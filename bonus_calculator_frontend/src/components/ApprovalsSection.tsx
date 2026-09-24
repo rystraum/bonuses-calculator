@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, CheckCircle2, RotateCcw, Undo2 } from 'lucide-react'
-import { format } from 'date-fns'
-import type { Distribution } from '@/lib/model'
+import { Camera, CheckCircle2, Eye, Lightbulb, RotateCcw, Undo2, type LucideIcon } from 'lucide-react'
+import { fmtDateTime, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { SectionHeader } from '@/components/chrome'
 import {
@@ -12,8 +11,6 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-
-const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 
 // ─── non-owner approve control ────────────────────────────────────────────────
 
@@ -178,69 +175,69 @@ function ApproveDialog({ dist }: { dist: Distribution }) {
   )
 }
 
-// ─── owner approvals panel ────────────────────────────────────────────────────
+// ─── owner participation panel ────────────────────────────────────────────────
 
-export function ApprovalsSection({ dist }: { dist: Distribution }) {
+export function ParticipationSection({ dist }: { dist: Distribution }) {
   const store = useStore()
-  const { loadApprovals, loadUsers } = store
-  const approvals = store.approvals[dist.id] ?? []
-
-  // The panel needs both this draft's approvals and the full user list.
-  useEffect(() => {
-    loadApprovals(dist.id).catch(() => {})
-    loadUsers().catch(() => {})
-  }, [loadApprovals, loadUsers, dist.id])
-
-  const approverIds = new Set(approvals.map((a) => a.user.id))
-  const pending = store.db.users.filter((u) => u.id !== dist.createdBy?.id && !approverIds.has(u.id))
-  const total = approvals.length + pending.length
+  // One row per user except the owner; the API orders by username.
+  const rows = (store.participation[dist.id] ?? []).filter((p) => p.user.id !== dist.createdBy?.id)
+  const approved = rows.filter((p) => p.approval !== null).length
 
   return (
     <section>
       <SectionHeader
-        title="Approvals"
-        hint="Sign-offs from non-owners, each backed by a selfie taken at approval time"
+        title="Participation"
+        hint="Who has opened this draft, submitted a suggestion, or approved it"
       >
-        <span className="num text-sm font-semibold">{approvals.length} of {total} approved</span>
+        <span className="num text-sm font-semibold">{approved} of {rows.length} approved</span>
       </SectionHeader>
 
-      {approvals.length === 0 && pending.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-          No other users can approve this draft yet.
+          No other users can participate in this draft yet.
         </div>
       ) : (
-        <div className="space-y-4 rounded-lg border bg-card p-4 shadow-xs">
-          <div>
-            <span className="kicker mb-2 block">Approved</span>
-            {approvals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No approvals yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {approvals.map((a) => (
-                  <li key={a.id} className="flex items-center gap-3">
-                    <img src={a.selfie} alt={`${a.user.username}'s approval selfie`}
-                      className="h-10 w-10 rounded-full object-cover" />
-                    <div className="leading-tight">
-                      <div className="text-sm font-medium">{a.user.username}</div>
-                      <div className="text-xs text-muted-foreground">{fmtDateTime(a.approvedAt)}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {pending.length > 0 && (
-            <div>
-              <span className="kicker mb-2 block">Not yet approved</span>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1">
-                {pending.map((u) => (
-                  <li key={u.id} className="text-sm text-muted-foreground">{u.username}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+        <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+          <table className="ledger">
+            <thead>
+              <tr><th>User</th><th>Seen</th><th>Suggestion</th><th>Approval</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.user.id}>
+                  <td className="font-medium">{p.user.username}</td>
+                  <td><Indicator icon={Eye} at={p.seenAt} /></td>
+                  <td><Indicator icon={Lightbulb} at={p.suggestedAt} /></td>
+                  <td>
+                    {p.approval ? (
+                      <span className="inline-flex items-center gap-2">
+                        <img src={p.approval.selfie} alt={`${p.user.username}'s approval selfie`}
+                          className="h-8 w-8 rounded-full object-cover" />
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">
+                          {fmtDateTime(p.approval.approvedAt)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </section>
+  )
+}
+
+/** Icon + timestamp when the event happened; a muted dash otherwise. */
+function Indicator({ icon: Icon, at }: { icon: LucideIcon; at: string | null }) {
+  if (!at) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <Icon className="h-3.5 w-3.5 text-emerald-700" />
+      <span className="text-xs text-muted-foreground">{fmtDateTime(at)}</span>
+    </span>
   )
 }

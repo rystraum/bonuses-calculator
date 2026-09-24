@@ -2,13 +2,13 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, CheckCheck, Lock, Plus, Share2, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
+import { fmtDateTime, peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { AppShell, Money, NoteInput, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
 import SummaryView from '@/components/SummaryView'
 import SuggestionEditor, { SubmitSuggestionButton } from '@/components/SuggestionEditor'
 import SuggestionsSection, { SuggestionMark, SuggestionViewDialog } from '@/components/SuggestionsSection'
-import ApprovalControl, { ApprovalsSection } from '@/components/ApprovalsSection'
+import ApprovalControl, { ParticipationSection } from '@/components/ApprovalsSection'
 import { collectMarks, useSuggestionChanges } from '@/lib/suggestions'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -20,23 +20,23 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy')
 
 export default function DistributionDetail() {
   const { id } = useParams<{ id: string }>()
   const store = useStore()
-  const { refreshDistribution, loadSuggestions, loadApprovals } = store
+  const { refreshDistribution, loadSuggestions, loadApprovals, loadParticipation } = store
   const dist = store.db.distributions.find((d) => d.id === id)
 
-  // Fresh snapshot + computation + suggestions + approvals whenever this page is opened.
+  // Fresh snapshot + computation + suggestions + approvals + participation whenever this page is opened.
   useEffect(() => {
     if (id) {
       refreshDistribution(id).catch(() => {})
       loadSuggestions(id).catch(() => {})
       loadApprovals(id).catch(() => {})
+      loadParticipation(id).catch(() => {})
     }
-  }, [refreshDistribution, loadSuggestions, loadApprovals, id])
+  }, [refreshDistribution, loadSuggestions, loadApprovals, loadParticipation, id])
 
   if (!dist) {
     // First render after a refresh has an empty db until the initial load
@@ -132,7 +132,7 @@ function DetailContent({ dist }: { dist: Distribution }) {
             ? <DraftEditor dist={dist} onViewSuggestion={setViewSuggestionId} />
             : <SuggestionEditor dist={dist} state={suggestionState} />}
           <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
-          {isOwner && <ApprovalsSection dist={dist} />}
+          {isOwner && <ParticipationSection dist={dist} />}
         </div>
       ) : (
         <SummaryView dist={dist} />
