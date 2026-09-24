@@ -106,6 +106,37 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     end
   end
 
+  describe "group/member ordering" do
+    test "get_distribution_full! returns members in a stable order across edits and refetches",
+         ctx do
+      {:ok, _} =
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id})
+
+      member_ids = fn full ->
+        for g <- full.distribution_groups, m <- g.members, do: m.id
+      end
+
+      full = Distributions.get_distribution_full!(ctx.distribution.id)
+      [group] = full.distribution_groups
+
+      # The contract: alphabetical by snapshotted employee name, matching
+      # the order members were snapshotted in (employees are preloaded by
+      # name), with id as a deterministic tiebreak.
+      assert Enum.map(group.members, & &1.employee_name) == ["Alice", "Bob"]
+
+      expected =
+        Enum.sort_by(group.members, &{&1.employee_name, &1.id}) |> Enum.map(& &1.id)
+
+      assert member_ids.(full) == expected
+
+      # Editing a member (which triggers a refetch in the UI) must not reshuffle.
+      [member | _] = group.members
+      {:ok, _} = Distributions.update_member(member, %{"hours" => "10"})
+
+      assert member_ids.(Distributions.get_distribution_full!(ctx.distribution.id)) == expected
+    end
+  end
+
   describe "status transitions and drafted guard" do
     test "finalize then mark_paid; invalid transitions rejected", ctx do
       assert {:error, :invalid_transition} =

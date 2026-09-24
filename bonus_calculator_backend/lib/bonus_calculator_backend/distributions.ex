@@ -19,6 +19,7 @@ defmodule BonusCalculatorBackend.Distributions do
   alias BonusCalculatorBackend.Accounts.User
   alias BonusCalculatorBackend.Groups.EmployeeGroup
   alias BonusCalculatorBackend.People
+  alias BonusCalculatorBackend.People.Employee
   alias BonusCalculatorBackend.Repo
 
   @audit_assocs [:created_by, :finalized_by, :paid_out_by]
@@ -39,6 +40,23 @@ defmodule BonusCalculatorBackend.Distributions do
         distribution_shareholders: :shareholder
       ] ++ @audit_assocs
     )
+    |> order_group_snapshots()
+  end
+
+  # Postgres returns preloaded rows in arbitrary physical order, so groups
+  # and members appeared to shuffle after any edit refetched the
+  # distribution. Groups keep snapshot order (inserted_at + id); members are
+  # alphabetical by their snapshotted name, which never changes for a given
+  # distribution, so the order is deterministic and stable across edits.
+  defp order_group_snapshots(%Distribution{distribution_groups: groups} = distribution) do
+    groups =
+      groups
+      |> Enum.sort_by(&{&1.inserted_at, &1.id})
+      |> Enum.map(fn group ->
+        %{group | members: Enum.sort_by(group.members, &{&1.employee_name, &1.id})}
+      end)
+
+    %{distribution | distribution_groups: groups}
   end
 
   def create_distribution(attrs, user \\ nil) do
@@ -139,7 +157,7 @@ defmodule BonusCalculatorBackend.Distributions do
           })
           |> Repo.insert!()
 
-        group = Repo.preload(group, :employees)
+        group = Repo.preload(group, employees: from(e in Employee, order_by: e.name))
 
         for employee <- group.employees do
           %DistributionGroupMember{}

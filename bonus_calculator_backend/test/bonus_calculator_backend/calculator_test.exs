@@ -71,7 +71,7 @@ defmodule BonusCalculatorBackend.CalculatorTest do
     distribution = Distributions.get_distribution_full!(ctx.distribution.id)
     result = Calculator.compute(distribution, People.list_shareholders())
 
-    [group_a, group_b] = result.groups
+    [group_a, group_b] = Enum.sort_by(result.groups, & &1.name)
 
     # Group A: budget 40,000; impact 24,000; effort 16,000
     assert group_a.name == "Group A"
@@ -83,7 +83,10 @@ defmodule BonusCalculatorBackend.CalculatorTest do
     assert group_a.peso_per_impact == "160"
     assert group_a.peso_per_hour == "100"
 
-    [a1, a2] = group_a.members
+    [a1, a2] =
+      [ctx.p1.id, ctx.p2.id]
+      |> Enum.map(&Enum.find(group_a.members, fn m -> m.employee_id == &1 end))
+
     assert a1.employee_id == ctx.p1.id
     assert a1.impact_amount == "8000"
     assert a1.effort_amount == "10000"
