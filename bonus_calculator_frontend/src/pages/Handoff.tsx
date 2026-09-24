@@ -54,7 +54,7 @@ export default function Handoff() {
   const r = result ?? EMPTY_RESULT
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 py-10">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-10">
       <div>
         <Link to={`/distributions/${dist.id}`} className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Back to distribution
@@ -77,12 +77,7 @@ export default function Handoff() {
           <section>
             <h2 className="kicker mb-2">Per-person totals</h2>
             <div className="overflow-x-auto rounded-lg border">
-              <table className="ledger">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th className="r">Bonuses</th>
-                    <th className="r">Tax on Bonuses</th>
+              <table className="ledger min-w-[52rem]">
                     <th className="r">Dividends</th>
                     <th className="r">Tax on Dividends</th>
                     <th className="r">Total</th>
@@ -120,7 +115,7 @@ export default function Handoff() {
           <section>
             <h2 className="kicker mb-2">Shareholders</h2>
             <div className="overflow-x-auto rounded-lg border">
-              <table className="ledger">
+              <table className="ledger min-w-[36rem]">
                 <thead>
                   <tr><th>Name</th><th className="r">Shares</th><th className="r">Dividend</th></tr>
                 </thead>
