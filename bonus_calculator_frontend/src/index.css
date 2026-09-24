@@ -136,3 +136,13 @@
     @apply text-[0.6875rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground;
   }
 }
+/* Handoff print output: default to landscape and show page numbers. Chrome
+   only honors `size` here — enable "Headers and footers" in its print
+   dialog for page numbers; the repeated per-page header is rendered via
+   print-only table header rows. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+}
