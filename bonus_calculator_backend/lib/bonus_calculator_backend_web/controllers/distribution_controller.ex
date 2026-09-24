@@ -11,7 +11,10 @@ defmodule BonusCalculatorBackendWeb.DistributionController do
   end
 
   def show(conn, %{"id" => id}) do
-    json(conn, %{data: full_json(Distributions.get_distribution_full!(id))})
+    distribution = Distributions.get_distribution_full!(id)
+    Distributions.record_view(distribution, conn.assigns.current_user)
+
+    json(conn, %{data: full_json(distribution)})
   end
 
   def create(conn, params) do

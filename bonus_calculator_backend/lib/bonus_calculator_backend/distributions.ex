@@ -20,7 +20,8 @@ defmodule BonusCalculatorBackend.Distributions do
     DistributionGroupMember,
     DistributionShareholder,
     DistributionSpecialBonus,
-    DistributionSuggestion
+    DistributionSuggestion,
+    DistributionView
   }
 
   alias BonusCalculatorBackend.Accounts.User
@@ -411,6 +412,68 @@ defmodule BonusCalculatorBackend.Distributions do
        do: {:error, :owner_cannot_approve}
 
   defp ensure_cannot_self_approve(%Distribution{}, %User{}), do: :ok
+
+  ## Views
+
+  @doc """
+  Records that `user` has seen `distribution`, stamping `seen_at` to now.
+  Upserts on the (distribution, user) pair. Best-effort: a failure to record
+  a view must never break the read that triggered it, so this always
+  returns `:ok`.
+  """
+  def record_view(%Distribution{} = distribution, %User{} = user) do
+    %DistributionView{}
+    |> DistributionView.changeset(%{})
+    |> Ecto.Changeset.put_change(:distribution_id, distribution.id)
+    |> Ecto.Changeset.put_change(:user_id, user.id)
+    |> Ecto.Changeset.put_change(:seen_at, DateTime.utc_now() |> DateTime.truncate(:second))
+    |> Repo.insert(
+      on_conflict: {:replace, [:seen_at, :updated_at]},
+      conflict_target: [:distribution_id, :user_id]
+    )
+    |> case do
+      {:ok, _view} -> :ok
+      {:error, _changeset} -> :ok
+    end
+  end
+
+  ## Participation
+
+  @doc """
+  Per-user participation on a distribution: one entry per user (username asc)
+  with the latest `seen_at`, the suggestion's `updated_at` as `suggested_at`,
+  and the full approval struct, each nil when absent.
+  """
+  def participation(%Distribution{} = distribution) do
+    views =
+      Repo.all(
+        from v in DistributionView,
+          where: v.distribution_id == ^distribution.id,
+          select: {v.user_id, v.seen_at}
+      )
+      |> Map.new()
+
+    suggestions =
+      Repo.all(
+        from s in DistributionSuggestion,
+          where: s.distribution_id == ^distribution.id,
+          select: {s.user_id, s.updated_at}
+      )
+      |> Map.new()
+
+    approvals =
+      Repo.all(from a in DistributionApproval, where: a.distribution_id == ^distribution.id)
+      |> Map.new(&{&1.user_id, &1})
+
+    for user <- BonusCalculatorBackend.Accounts.list_users() do
+      %{
+        user: user,
+        seen_at: Map.get(views, user.id),
+        suggested_at: Map.get(suggestions, user.id),
+        approval: Map.get(approvals, user.id)
+      }
+    end
+  end
 
   @doc """
   Overlays a suggestion's `changes` map onto a fully-preloaded distribution

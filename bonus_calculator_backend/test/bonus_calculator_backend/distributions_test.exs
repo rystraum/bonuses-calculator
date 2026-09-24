@@ -617,6 +617,72 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     end
   end
 
+  describe "views and participation" do
+    setup ctx do
+      owner = create_user("view-owner")
+      viewer = create_user("viewer")
+
+      %{owner: owner, viewer: viewer, dist: ctx.distribution}
+    end
+
+    test "record_view creates then updates the same row", ctx do
+      assert :ok = Distributions.record_view(ctx.dist, ctx.viewer)
+      assert :ok = Distributions.record_view(ctx.dist, ctx.viewer)
+
+      assert [entry] = Distributions.participation(ctx.dist) |> Enum.filter(&(&1.seen_at != nil))
+      assert entry.user.id == ctx.viewer.id
+      assert %DateTime{} = entry.seen_at
+
+      # Backdate the row, re-record, and confirm seen_at moves forward on the
+      # same user (a single upserted row, not a second one).
+      [view] = Repo.all(Distributions.DistributionView)
+
+      view
+      |> Ecto.Changeset.change(seen_at: ~U[2026-01-01 00:00:00Z])
+      |> Repo.update!()
+
+      assert :ok = Distributions.record_view(ctx.dist, ctx.viewer)
+      assert [_] = Repo.all(Distributions.DistributionView)
+
+      assert [entry] = Distributions.participation(ctx.dist) |> Enum.filter(&(&1.seen_at != nil))
+      assert DateTime.compare(entry.seen_at, ~U[2026-01-01 00:00:00Z]) == :gt
+    end
+
+    test "participation lists every user with seen/suggested/approved merged", ctx do
+      {:ok, suggestion} =
+        Distributions.upsert_suggestion(ctx.dist, ctx.viewer, %{
+          "explanation" => "more",
+          "changes" => %{}
+        })
+
+      {:ok, approval} = Distributions.approve_distribution(ctx.dist, ctx.owner, "selfie")
+      :ok = Distributions.record_view(ctx.dist, ctx.owner)
+
+      participation = Distributions.participation(ctx.dist)
+
+      assert [owner_entry, viewer_entry] = participation
+      assert owner_entry.user.username == "view-owner"
+      assert viewer_entry.user.username == "viewer"
+
+      assert %DateTime{} = owner_entry.seen_at
+      assert owner_entry.suggested_at == nil
+      assert owner_entry.approval.id == approval.id
+
+      assert viewer_entry.seen_at == nil
+      assert viewer_entry.suggested_at == suggestion.updated_at
+      assert viewer_entry.approval == nil
+    end
+
+    test "participation includes users with no activity at all", ctx do
+      stranger = create_user("stranger")
+
+      participation = Distributions.participation(ctx.dist)
+
+      stranger_entry = Enum.find(participation, &(&1.user.id == stranger.id))
+      assert %{seen_at: nil, suggested_at: nil, approval: nil} = stranger_entry
+    end
+  end
+
   describe "weight validation" do
     test "effort_weight + impact_weight must equal 100" do
       assert {:error, changeset} =
