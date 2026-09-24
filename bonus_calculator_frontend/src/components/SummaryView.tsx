@@ -190,6 +190,20 @@ export default function SummaryView({ dist }: { dist: Distribution }) {
             </p>
           </div>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border bg-card p-4 shadow-xs">
+          <div>
+            <div className="kicker">Grand total</div>
+            <div className="num mt-1 font-display text-3xl font-semibold">{peso(r.grandTotal)}</div>
+          </div>
+          <div className="num flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span>Bonuses {peso(r.bonusPaidOut)}</span>
+            <span aria-hidden>+</span>
+            <span>Special {peso(r.specialBonusTotal)}</span>
+            <span aria-hidden>+</span>
+            <span>Dividends {peso(r.dividendPaidOut)}</span>
+          </div>
+        </div>
       </section>
     </div>
   )
