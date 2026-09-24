@@ -2,6 +2,8 @@
 // UI-facing model. All data comes from the Phoenix API (see lib/store.tsx);
 // decimals arrive as strings and are coerced with `num()` at the boundary.
 
+import { format } from 'date-fns'
+
 export type UUID = string
 
 export type DistributionStatus = 'drafted' | 'finalized' | 'paid_out'
@@ -210,6 +212,17 @@ export interface Approval {
   approvedAt: string // ISO
 }
 
+// ─── draft participation ──────────────────────────────────────────────────────
+// Per-user engagement with a drafted distribution, for the owner: who opened
+// it, who submitted a suggestion, and who approved. One entry per user.
+
+export interface Participation {
+  user: { id: UUID; username: string }
+  seenAt: string | null // ISO; set when the user opens the distribution page
+  suggestedAt: string | null // ISO
+  approval: { id: UUID; selfie: string; approvedAt: string } | null
+}
+
 export interface DB {
   users: User[]
   shareholders: Shareholder[]
@@ -232,3 +245,6 @@ export const peso = (n: number): string =>
 
 export const pct = (n: number): string =>
   n.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'
+
+export const fmtDateTime = (iso: string): string =>
+  format(new Date(iso), "MMM d, yyyy 'at' h:mm a")

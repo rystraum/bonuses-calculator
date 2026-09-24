@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
-  Approval, DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, Suggestion,
-  SuggestionChanges, UUID,
+  Approval, DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, Participation,
+  PersonPayout, Suggestion, SuggestionChanges, UUID,
 } from './model'
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -105,6 +105,11 @@ interface ApiUserRef { id: string; username: string }
 interface ApiApproval {
   id: string; distribution_id: string; user: ApiUserRef
   selfie: string; approved_at: string
+}
+interface ApiParticipation {
+  user: ApiUserRef
+  seen_at: string | null; suggested_at: string | null
+  approval: { id: string; selfie: string; approved_at: string } | null
 }
 interface ApiSuggestion {
   id: string; distribution_id: string; user: ApiUserRef
@@ -326,6 +331,17 @@ function mapApproval(a: ApiApproval): Approval {
   return { id: a.id, user: a.user, selfie: a.selfie, approvedAt: a.approved_at }
 }
 
+function mapParticipation(p: ApiParticipation): Participation {
+  return {
+    user: p.user,
+    seenAt: p.seen_at ?? null,
+    suggestedAt: p.suggested_at ?? null,
+    approval: p.approval
+      ? { id: p.approval.id, selfie: p.approval.selfie, approvedAt: p.approval.approved_at }
+      : null,
+  }
+}
+
 /** UI model → snake_case wire shape accepted by simulate / suggestion upsert. */
 export function changesToWire(changes: SuggestionChanges): Record<string, unknown> {
   const wire: Record<string, unknown> = {}
@@ -421,6 +437,9 @@ interface StoreCtx {
   /** selfie is a full data URL captured from the camera; resolves to an error message or null. */
   approveDistribution: (distId: UUID, selfie: string) => Promise<string | null>
   rescindApproval: (distId: UUID) => Promise<string | null>
+  // participation
+  participation: Record<UUID, Participation[]>
+  loadParticipation: (distId: UUID) => Promise<void>
   // users
   loadUsers: () => Promise<void>
   createUser: (username: string, password: string) => Promise<string | null>
@@ -481,6 +500,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [computations, setComputations] = useState<Record<UUID, DistributionResult>>({})
   const [suggestions, setSuggestions] = useState<Record<UUID, Suggestion[]>>({})
   const [approvals, setApprovals] = useState<Record<UUID, Approval[]>>({})
+  const [participation, setParticipation] = useState<Record<UUID, Participation[]>>({})
   const [simulations, setSimulations] = useState<Record<UUID, DistributionResult>>({})
   const [sessionUserId, setSessionUserId] = useState<UUID | null>(storedSession?.id ?? null)
   const [seedImportResult, setSeedImportResult] = useState<SeedImportResult | null>(null)
@@ -530,6 +550,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const loadApprovals = useCallback(async (distId: UUID) => {
     const list = await apiFetch<ApiApproval[]>(`/distributions/${distId}/approvals`)
     setApprovals((prev) => ({ ...prev, [distId]: list.map(mapApproval) }))
+  }, [])
+
+  const loadParticipation = useCallback(async (distId: UUID) => {
+    const list = await apiFetch<ApiParticipation[]>(`/distributions/${distId}/participation`)
+    setParticipation((prev) => ({ ...prev, [distId]: list.map(mapParticipation) }))
   }, [])
 
   // Debounced live preview while composing a suggestion (~300ms).
@@ -608,6 +633,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setComputations({})
     setSuggestions({})
     setApprovals({})
+    setParticipation({})
     setSimulations({})
     setBootstrapping(false)
   }, [])
@@ -675,14 +701,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setComputations({})
       setSuggestions({})
       setApprovals({})
+      setParticipation({})
       setSimulations({})
     })
   }, [])
 
   const api = useMemo<StoreCtx>(() => ({
-    db, computations, suggestions, approvals, simulations, sessionUserId, bootstrapping,
+    db, computations, suggestions, approvals, participation, simulations, sessionUserId, bootstrapping,
     login, logout, refreshDistribution, getComputation,
-    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals, loadParticipation,
 
     submitSuggestion: async (distId, explanation, changes) => {
       try {
@@ -696,23 +723,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return next
         })
         await loadSuggestions(distId)
+        await loadParticipation(distId)
         return null
       } catch (e) {
         return e instanceof Error ? e.message : 'Something went wrong.'
       }
     },
     deleteSuggestion: (distId, suggestionId) =>
-      run(() => apiFetch(`/suggestions/${suggestionId}`, { method: 'DELETE' }), () => loadSuggestions(distId)),
+      run(
+        () => apiFetch(`/suggestions/${suggestionId}`, { method: 'DELETE' }),
+        async () => { await Promise.all([loadSuggestions(distId), loadParticipation(distId)]) },
+      ),
 
     approveDistribution: (distId, selfie) =>
       run(
         () => apiFetch(`/distributions/${distId}/approval`, { method: 'POST', body: { selfie } }),
-        () => loadApprovals(distId),
+        async () => { await Promise.all([loadApprovals(distId), loadParticipation(distId)]) },
       ),
     rescindApproval: (distId) =>
       run(
         () => apiFetch(`/distributions/${distId}/approval`, { method: 'DELETE' }),
-        () => loadApprovals(distId),
+        async () => { await Promise.all([loadApprovals(distId), loadParticipation(distId)]) },
       ),
 
     createUser: (username, password) =>
@@ -906,9 +937,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
   }), [
-    db, computations, suggestions, approvals, simulations, sessionUserId, bootstrapping, login, logout, seedImportResult,
+    db, computations, suggestions, approvals, participation, simulations, sessionUserId, bootstrapping, login, logout, seedImportResult,
     refreshDistribution, getComputation, reloadCore, reloadDistributions, loadAll, run, scheduleRefresh,
-    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals, loadParticipation,
   ])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
