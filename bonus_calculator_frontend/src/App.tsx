@@ -10,6 +10,7 @@ import Compare from '@/pages/Compare'
 import Import from '@/pages/Import'
 import Settings from '@/pages/Settings'
 import Handoff from '@/pages/Handoff'
+import Users from '@/pages/Users'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/shareholders" element={<RequireAuth><Shareholders /></RequireAuth>} />
         <Route path="/employees" element={<RequireAuth><Employees /></RequireAuth>} />
         <Route path="/import" element={<RequireAuth><Import /></RequireAuth>} />
+        <Route path="/users" element={<RequireAuth><Users /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
         <Route path="*" element={<RequireAuth><Distributions /></RequireAuth>} />
       </Routes>

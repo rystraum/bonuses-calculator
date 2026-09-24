@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Navigate, useLocation, useNavigate } from 'react-router'
 import {
-  Banknote, Coins, GitCompareArrows, LogOut, Settings2, Upload, UserRound, UsersRound, Wallet,
+  Banknote, Coins, GitCompareArrows, LogOut, Settings2, Upload, UserRound, UserRoundPlus, UsersRound, Wallet,
 } from 'lucide-react'
 import { peso, type DistributionStatus } from '@/lib/model'
 import { useStore } from '@/lib/store'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 // ─── primitives ───────────────────────────────────────────────────────────────
@@ -88,6 +89,49 @@ export function NumInput({
   )
 }
 
+/** Multiline note: auto-expanding textarea, local state while focused, commits on blur. */
+export function NoteInput({
+  value, onCommit, className,
+}: {
+  value: string | null
+  onCommit: (note: string | null) => void
+  className?: string
+}) {
+  const [text, setText] = useState(value ?? '')
+  const [focused, setFocused] = useState(false)
+  const [lastValue, setLastValue] = useState(value)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  if (!focused && value !== lastValue) {
+    setLastValue(value)
+    setText(value ?? '')
+  }
+
+  // Grow to fit content (covers browsers without CSS field-sizing: content).
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
+
+  return (
+    <Textarea
+      ref={ref}
+      rows={1}
+      className={cn('min-h-8 min-w-40 resize-none overflow-hidden px-2 py-1.5 text-xs', className)}
+      placeholder="Rating justification"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false)
+        const next = text.trim() || null
+        if (next !== value) onCommit(next)
+      }}
+    />
+  )
+}
+
 // ─── shell ────────────────────────────────────────────────────────────────────
 
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -102,6 +146,7 @@ const NAV = [
   { to: '/compare', label: 'Compare', icon: GitCompareArrows },
   { to: '/shareholders', label: 'Shareholders', icon: Coins },
   { to: '/employees', label: 'Employees & Groups', icon: UsersRound },
+  { to: '/users', label: 'Users', icon: UserRoundPlus },
   { to: '/import', label: 'Import', icon: Upload },
 ]
 
