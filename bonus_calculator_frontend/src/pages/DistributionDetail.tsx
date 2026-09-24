@@ -160,51 +160,65 @@ function DraftEditor({ dist }: { dist: Distribution }) {
 
   const allocTotal = dist.groups.reduce((s, g) => s + g.allocationPct, 0)
   const addableGroups = db.groups.filter((g) => !dist.groups.some((dg) => dg.groupId === g.id))
+  const totalBudget = dist.bonusBudget + (dist.includeShareholders ? dist.dividendBudget : 0)
+  const totalShares = preview.dividends.reduce((s, d) => s + d.shares, 0)
+  const totalOwnership = preview.dividends.reduce((s, d) => s + d.pct, 0)
 
   return (
     <div className="space-y-10">
       {/* config strip */}
       <section className="rounded-lg border bg-card p-4 shadow-xs">
-        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="block">
-            <span className="kicker mb-1.5 block">Total bonus budget</span>
-            <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.bonusBudget}
-              onCommit={(n) => store.updateDistribution(dist.id, { bonusBudget: n })} />
-          </label>
-          <label className="block">
-            <span className="kicker mb-1.5 block">Planned date</span>
-            <Input type="date" className="h-10 bg-background font-semibold"
-              value={dist.plannedDate ?? ''}
-              onChange={(e) => store.updateDistribution(dist.id, { plannedDate: e.target.value || null })} />
-          </label>
-          <div>
-            <span className="kicker mb-1.5 block">Impact / effort weighting</span>
-            <div className="flex items-center gap-2">
-              <NumInput className="!border-input h-10 !bg-background font-semibold" value={dist.impactPct} suffix="% impact"
-                onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, n)) })} />
-              <NumInput className="!border-input h-10 !bg-background font-semibold" value={100 - dist.impactPct} suffix="% effort"
-                onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, 100 - n)) })} />
-            </div>
-            <p className="mt-1 text-[0.6875rem] text-muted-foreground">Always totals 100% — editing one side adjusts the other.</p>
-          </div>
-          {dist.includeShareholders && (
+        <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-4">
             <label className="block">
-              <span className="kicker mb-1.5 block">Total dividend budget</span>
-              <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.dividendBudget}
-                onCommit={(n) => store.updateDistribution(dist.id, { dividendBudget: n })} />
+              <span className="kicker mb-1.5 block">Total bonus budget</span>
+              <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.bonusBudget}
+                onCommit={(n) => store.updateDistribution(dist.id, { bonusBudget: n })} />
             </label>
-          )}
-          <div>
-            <span className="kicker mb-1.5 block">Group allocation</span>
-            <div className={cn(
-              'num flex h-10 items-center rounded-md border px-3 text-lg font-semibold',
-              Math.abs(allocTotal - 100) < 0.001 ? 'text-emerald-700' : 'text-amber-700',
-            )}>
-              {pct(allocTotal)}
+            {dist.includeShareholders && (
+              <label className="block">
+                <span className="kicker mb-1.5 block">Total dividend budget</span>
+                <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.dividendBudget}
+                  onCommit={(n) => store.updateDistribution(dist.id, { dividendBudget: n })} />
+              </label>
+            )}
+            <div>
+              <span className="kicker mb-1.5 block">Total budget</span>
+              <div className="num flex h-10 items-center text-lg font-semibold">{peso(totalBudget)}</div>
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">Bonus + dividends, read-only.</p>
             </div>
-            <p className="mt-1 text-[0.6875rem] text-muted-foreground">
-              {Math.abs(allocTotal - 100) < 0.001 ? 'Fully allocated.' : 'Should total 100% across groups.'}
-            </p>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <span className="kicker mb-1.5 block">Impact / effort weighting</span>
+              <div className="flex items-center gap-2">
+                <NumInput className="!border-input h-10 !bg-background font-semibold" value={dist.impactPct} suffix="% impact"
+                  onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, n)) })} />
+                <NumInput className="!border-input h-10 !bg-background font-semibold" value={100 - dist.impactPct} suffix="% effort"
+                  onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, 100 - n)) })} />
+              </div>
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">Always totals 100% — editing one side adjusts the other.</p>
+            </div>
+            <div>
+              <span className="kicker mb-1.5 block">Group allocation</span>
+              <div className={cn(
+                'num flex h-10 items-center text-lg font-semibold',
+                Math.abs(allocTotal - 100) < 0.001 ? 'text-emerald-700' : 'text-amber-700',
+              )}>
+                {pct(allocTotal)}
+              </div>
+              <p className="mt-1 text-[0.6875rem] text-muted-foreground">
+                {Math.abs(allocTotal - 100) < 0.001 ? 'Fully allocated.' : 'Should total 100% across groups.'}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="kicker mb-1.5 block">Planned date</span>
+              <Input type="date" className="h-10 bg-background font-semibold"
+                value={dist.plannedDate ?? ''}
+                onChange={(e) => store.updateDistribution(dist.id, { plannedDate: e.target.value || null })} />
+            </label>
           </div>
         </div>
       </section>
@@ -235,6 +249,16 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                   </td></tr>
                 )}
               </tbody>
+              {preview.dividends.length > 0 && (
+                <tfoot>
+                  <tr>
+                    <td className="font-semibold">Total</td>
+                    <td className="r num font-semibold">{totalShares.toLocaleString()}</td>
+                    <td className="r num text-muted-foreground">{pct(totalOwnership)}</td>
+                    <td className="r"><Money value={preview.dividendPaidOut} className="font-semibold" /></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </section>
