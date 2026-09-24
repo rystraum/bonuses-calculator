@@ -6,7 +6,8 @@ import type {
 // ─── API client ───────────────────────────────────────────────────────────────
 // All endpoints are JSON, snake_case; decimals arrive as strings (see num()).
 
-const API_BASE = 'http://localhost:4000/api'
+// Set at build time (VITE_API_BASE); falls back to the local Phoenix dev server.
+const API_BASE: string = import.meta.env.VITE_API_BASE ?? 'http://localhost:4000/api'
 const TOKEN_KEY = 'bdc.token.v1'
 const USER_KEY = 'bdc.user.v1'
 

@@ -10,6 +10,9 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  preview: {
+    allowedHosts: ['bonuses.rystraum.com'],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

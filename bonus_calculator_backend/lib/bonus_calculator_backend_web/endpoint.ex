@@ -38,7 +38,7 @@ defmodule BonusCalculatorBackendWeb.Endpoint do
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug CORSPlug,
-    origin: ["http://localhost:5173"],
+    origin: &BonusCalculatorBackendWeb.Endpoint.cors_origins/0,
     headers: [
       "Authorization",
       "Content-Type",
@@ -64,4 +64,12 @@ defmodule BonusCalculatorBackendWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
   plug BonusCalculatorBackendWeb.Router
+
+  # Runtime-configurable CORS origins: comma-separated list in CORS_ORIGINS.
+  # Defaults to the Vite dev server; production adds the frontend origin.
+  def cors_origins do
+    System.get_env("CORS_ORIGINS", "http://localhost:5173")
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+  end
 end
