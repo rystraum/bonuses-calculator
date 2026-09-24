@@ -21,6 +21,8 @@ defmodule BonusCalculatorBackendWeb.Router do
     delete "/session", SessionController, :delete
 
     patch "/user", UserController, :update
+    get "/users", UserController, :index
+    post "/users", UserController, :create
 
     resources "/employees", EmployeeController, except: [:new, :edit]
     resources "/shareholders", ShareholderController, except: [:new, :edit]
@@ -33,6 +35,12 @@ defmodule BonusCalculatorBackendWeb.Router do
     post "/distributions/:id/finalize", DistributionController, :finalize
     post "/distributions/:id/mark_paid", DistributionController, :mark_paid
     get "/distributions/:id/computation", DistributionController, :computation
+
+    get "/distributions/:id/suggestions", SuggestionController, :index
+    post "/distributions/:id/suggestion", SuggestionController, :upsert
+    post "/distributions/:id/simulate", SuggestionController, :simulate
+    get "/suggestions/:id", SuggestionController, :show
+    delete "/suggestions/:id", SuggestionController, :delete
 
     post "/distributions/:id/groups", DistributionGroupController, :create
     patch "/distribution_groups/:id", DistributionGroupController, :update
