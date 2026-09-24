@@ -15,6 +15,7 @@ defmodule BonusCalculatorBackend.Distributions do
 
   alias BonusCalculatorBackend.Distributions.{
     Distribution,
+    DistributionApproval,
     DistributionGroup,
     DistributionGroupMember,
     DistributionShareholder,
@@ -348,6 +349,68 @@ defmodule BonusCalculatorBackend.Distributions do
        do: {:error, :owner_cannot_suggest}
 
   defp ensure_not_owner(%Distribution{}, %User{}), do: :ok
+
+  ## Approvals
+
+  def list_approvals(%Distribution{} = distribution) do
+    Repo.all(
+      from a in DistributionApproval,
+        where: a.distribution_id == ^distribution.id,
+        order_by: [asc: a.approved_at],
+        preload: :user
+    )
+  end
+
+  @doc """
+  Creates or replaces the user's approval of a drafted distribution, stamping
+  `approved_at` and storing the mandatory selfie. Owners cannot approve their
+  own distribution.
+  """
+  def approve_distribution(%Distribution{} = distribution, %User{} = user, selfie) do
+    with :ok <- ensure_drafted(distribution),
+         :ok <- ensure_cannot_self_approve(distribution, user) do
+      %DistributionApproval{}
+      |> DistributionApproval.changeset(%{"selfie" => selfie})
+      |> Ecto.Changeset.put_change(:distribution_id, distribution.id)
+      |> Ecto.Changeset.put_change(:user_id, user.id)
+      |> Ecto.Changeset.put_change(
+        :approved_at,
+        DateTime.utc_now() |> DateTime.truncate(:second)
+      )
+      |> Repo.insert(
+        on_conflict: {:replace, [:selfie, :approved_at, :updated_at]},
+        conflict_target: [:distribution_id, :user_id]
+      )
+      |> case do
+        {:ok, _inserted} ->
+          # On conflict the existing row keeps its id; reload by the unique key
+          # so callers always get the persisted row.
+          approval =
+            Repo.get_by!(DistributionApproval,
+              distribution_id: distribution.id,
+              user_id: user.id
+            )
+
+          {:ok, Repo.preload(approval, :user)}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
+    end
+  end
+
+  def rescind_approval(%Distribution{} = distribution, %User{} = user) do
+    case Repo.get_by(DistributionApproval, distribution_id: distribution.id, user_id: user.id) do
+      nil -> {:error, :no_approval}
+      approval -> Repo.delete(approval)
+    end
+  end
+
+  defp ensure_cannot_self_approve(%Distribution{created_by_id: created_by_id}, %User{id: user_id})
+       when created_by_id == user_id,
+       do: {:error, :owner_cannot_approve}
+
+  defp ensure_cannot_self_approve(%Distribution{}, %User{}), do: :ok
 
   @doc """
   Overlays a suggestion's `changes` map onto a fully-preloaded distribution

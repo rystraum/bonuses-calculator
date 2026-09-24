@@ -25,6 +25,18 @@ defmodule BonusCalculatorBackendWeb.FallbackController do
     |> json(%{error: "the distribution owner cannot submit a suggestion"})
   end
 
+  def call(conn, {:error, :owner_cannot_approve}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "the distribution owner cannot approve"})
+  end
+
+  def call(conn, {:error, :no_approval}) do
+    conn
+    |> put_status(:not_found)
+    |> json(%{error: "no approval to rescind"})
+  end
+
   def call(conn, {:error, :invalid_transition}) do
     conn
     |> put_status(:unprocessable_entity)

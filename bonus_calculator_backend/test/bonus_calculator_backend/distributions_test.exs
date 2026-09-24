@@ -532,6 +532,91 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     end
   end
 
+  describe "approvals" do
+    setup do
+      owner = create_user("approval-owner")
+      approver = create_user("approver")
+
+      {:ok, distribution} =
+        Distributions.create_distribution(
+          %{"name" => "Approvable", "bonus_budget" => "10000"},
+          owner
+        )
+
+      %{owner: owner, approver: approver, dist: distribution}
+    end
+
+    test "approve records the selfie and timestamp", ctx do
+      {:ok, approval} =
+        Distributions.approve_distribution(ctx.dist, ctx.approver, "data:image/jpeg;base64,abc")
+
+      assert approval.selfie == "data:image/jpeg;base64,abc"
+      assert %DateTime{} = approval.approved_at
+      assert approval.user.id == ctx.approver.id
+      assert approval.distribution_id == ctx.dist.id
+    end
+
+    test "re-approving replaces the selfie and keeps the row id", ctx do
+      {:ok, first} = Distributions.approve_distribution(ctx.dist, ctx.approver, "selfie-v1")
+      {:ok, second} = Distributions.approve_distribution(ctx.dist, ctx.approver, "selfie-v2")
+
+      assert second.id == first.id
+      assert second.selfie == "selfie-v2"
+
+      assert [approval] = Distributions.list_approvals(ctx.dist)
+      assert approval.id == first.id
+      assert approval.selfie == "selfie-v2"
+    end
+
+    test "approvals require a selfie", ctx do
+      assert {:error, changeset} = Distributions.approve_distribution(ctx.dist, ctx.approver, nil)
+      assert %{selfie: [_ | _]} = errors_on(changeset)
+
+      assert {:error, changeset} = Distributions.approve_distribution(ctx.dist, ctx.approver, "")
+      assert %{selfie: [_ | _]} = errors_on(changeset)
+    end
+
+    test "the owner cannot approve their own distribution", ctx do
+      assert {:error, :owner_cannot_approve} =
+               Distributions.approve_distribution(ctx.dist, ctx.owner, "selfie")
+    end
+
+    test "approvals require a drafted distribution", ctx do
+      {:ok, finalized} = Distributions.finalize_distribution(ctx.dist, ctx.owner)
+
+      assert {:error, :not_drafted} =
+               Distributions.approve_distribution(finalized, ctx.approver, "selfie")
+    end
+
+    test "rescind deletes the caller's approval", ctx do
+      {:ok, _} = Distributions.approve_distribution(ctx.dist, ctx.approver, "selfie")
+
+      assert {:ok, _} = Distributions.rescind_approval(ctx.dist, ctx.approver)
+      assert Distributions.list_approvals(ctx.dist) == []
+    end
+
+    test "rescinding without an approval errors", ctx do
+      assert {:error, :no_approval} = Distributions.rescind_approval(ctx.dist, ctx.approver)
+    end
+
+    test "list_approvals returns approvals oldest first with users", ctx do
+      other = create_user("other-approver")
+
+      {:ok, first} = Distributions.approve_distribution(ctx.dist, ctx.approver, "selfie-1")
+      {:ok, second} = Distributions.approve_distribution(ctx.dist, other, "selfie-2")
+
+      # approved_at has second precision; backdate the first row so ordering is
+      # deterministic.
+      first
+      |> Ecto.Changeset.change(approved_at: ~U[2026-01-01 00:00:00Z])
+      |> Repo.update!()
+
+      assert [%{id: first_id}, %{id: second_id}] = Distributions.list_approvals(ctx.dist)
+      assert first_id == first.id
+      assert second_id == second.id
+    end
+  end
+
   describe "weight validation" do
     test "effort_weight + impact_weight must equal 100" do
       assert {:error, changeset} =
