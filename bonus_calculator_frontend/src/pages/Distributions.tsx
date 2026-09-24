@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy')
 
 export default function Distributions() {
-  const { db, createDistribution, deleteDistribution } = useStore()
+  const { db, createDistribution, deleteDistribution, sessionUserId } = useStore()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -166,7 +166,7 @@ export default function Distributions() {
                         {d.status === 'drafted' ? 'Edit' : 'View'} <ArrowRight className="ml-1 h-3.5 w-3.5" />
                       </Link>
                     </Button>
-                    {d.status === 'drafted' && (
+                    {d.status === 'drafted' && (d.createdBy == null || d.createdBy.id === sessionUserId) && (
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => deleteDistribution(d.id)}>
                         <Trash2 className="h-4 w-4" />

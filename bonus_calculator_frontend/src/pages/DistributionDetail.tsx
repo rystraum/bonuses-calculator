@@ -4,8 +4,11 @@ import { ArrowLeft, CheckCheck, Lock, Plus, Share2, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
-import { AppShell, Money, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
+import { AppShell, Money, NoteInput, NumInput, SectionHeader, StatusBadge } from '@/components/chrome'
 import SummaryView from '@/components/SummaryView'
+import SuggestionEditor, { SubmitSuggestionButton } from '@/components/SuggestionEditor'
+import SuggestionsSection, { SuggestionMark, SuggestionViewDialog } from '@/components/SuggestionsSection'
+import { collectMarks, useSuggestionChanges } from '@/lib/suggestions'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -14,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
@@ -23,13 +25,16 @@ const fmtDate = (iso: string) => format(parseISO(iso.slice(0, 10)), 'MMM d, yyyy
 export default function DistributionDetail() {
   const { id } = useParams<{ id: string }>()
   const store = useStore()
-  const { refreshDistribution } = store
+  const { refreshDistribution, loadSuggestions } = store
   const dist = store.db.distributions.find((d) => d.id === id)
 
-  // Fresh snapshot + computation whenever this page is opened.
+  // Fresh snapshot + computation + suggestions whenever this page is opened.
   useEffect(() => {
-    if (id) refreshDistribution(id).catch(() => {})
-  }, [refreshDistribution, id])
+    if (id) {
+      refreshDistribution(id).catch(() => {})
+      loadSuggestions(id).catch(() => {})
+    }
+  }, [refreshDistribution, loadSuggestions, id])
 
   if (!dist) {
     // First render after a refresh has an empty db until the initial load
@@ -46,6 +51,20 @@ export default function DistributionDetail() {
 
   return (
     <AppShell>
+      <DetailContent dist={dist} />
+    </AppShell>
+  )
+}
+
+function DetailContent({ dist }: { dist: Distribution }) {
+  const store = useStore()
+  // Legacy rows have no owner; otherwise only the creator edits the draft directly.
+  const isOwner = dist.createdBy == null || dist.createdBy.id === store.sessionUserId
+  const suggestionState = useSuggestionChanges(dist)
+  const [viewSuggestionId, setViewSuggestionId] = useState<string | null>(null)
+
+  return (
+    <>
       <div className="mb-6">
         <Link to="/" className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> All distributions
@@ -73,9 +92,11 @@ export default function DistributionDetail() {
             </div>
           </div>
           <div className="flex gap-2">
-            {dist.status === 'drafted' && <FinalizeButton dist={dist} />}
+            {dist.status === 'drafted' && (isOwner
+              ? <FinalizeButton dist={dist} />
+              : <SubmitSuggestionButton dist={dist} state={suggestionState} />)}
             {dist.status === 'finalized' && <HandoffButton dist={dist} />}
-            {dist.status === 'finalized' && (
+            {dist.status === 'finalized' && isOwner && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="secondary"><CheckCheck className="mr-1.5 h-4 w-4" /> Mark as paid out</Button>
@@ -98,8 +119,23 @@ export default function DistributionDetail() {
         </div>
       </div>
 
-      {dist.status === 'drafted' ? <DraftEditor dist={dist} /> : <SummaryView dist={dist} />}
-    </AppShell>
+      {dist.status === 'drafted' ? (
+        <div className="space-y-10">
+          {isOwner
+            ? <DraftEditor dist={dist} onViewSuggestion={setViewSuggestionId} />
+            : <SuggestionEditor dist={dist} state={suggestionState} />}
+          <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
+        </div>
+      ) : (
+        <SummaryView dist={dist} />
+      )}
+      <SuggestionViewDialog
+        key={viewSuggestionId ?? 'closed'}
+        dist={dist}
+        suggestionId={viewSuggestionId}
+        onClose={() => setViewSuggestionId(null)}
+      />
+    </>
   )
 }
 
@@ -177,10 +213,11 @@ function HandoffButton({ dist }: { dist: Distribution }) {
 
 // ─── draft editor ─────────────────────────────────────────────────────────────
 
-function DraftEditor({ dist }: { dist: Distribution }) {
+function DraftEditor({ dist, onViewSuggestion }: { dist: Distribution; onViewSuggestion: (suggestionId: string) => void }) {
   const store = useStore()
   const { db } = store
   const preview = store.computations[dist.id] ?? EMPTY_RESULT
+  const suggestions = store.suggestions[dist.id] ?? []
 
   const allocTotal = dist.groups.reduce((s, g) => s + g.allocationPct, 0)
   const addableGroups = db.groups.filter((g) => !dist.groups.some((dg) => dg.groupId === g.id))
@@ -196,13 +233,23 @@ function DraftEditor({ dist }: { dist: Distribution }) {
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-4">
             <label className="block">
-              <span className="kicker mb-1.5 block">Total bonus budget</span>
+              <span className="kicker mb-1.5 flex items-center gap-1.5">
+                Total bonus budget
+                <SuggestionMark
+                  items={collectMarks(suggestions, (c) => c.distribution.bonusBudget)}
+                  base={dist.bonusBudget} kind="money" onView={onViewSuggestion} />
+              </span>
               <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.bonusBudget}
                 onCommit={(n) => store.updateDistribution(dist.id, { bonusBudget: n })} />
             </label>
             {dist.includeShareholders && (
               <label className="block">
-                <span className="kicker mb-1.5 block">Total dividend budget</span>
+                <span className="kicker mb-1.5 flex items-center gap-1.5">
+                  Total dividend budget
+                  <SuggestionMark
+                    items={collectMarks(suggestions, (c) => c.distribution.dividendBudget)}
+                    base={dist.dividendBudget} kind="money" onView={onViewSuggestion} />
+                </span>
                 <NumInput className="!border-input h-10 !bg-background text-lg font-semibold" value={dist.dividendBudget}
                   onCommit={(n) => store.updateDistribution(dist.id, { dividendBudget: n })} />
               </label>
@@ -220,7 +267,12 @@ function DraftEditor({ dist }: { dist: Distribution }) {
           </div>
           <div className="space-y-4">
             <div>
-              <span className="kicker mb-1.5 block">Impact / effort weighting</span>
+              <span className="kicker mb-1.5 flex items-center gap-1.5">
+                Impact / effort weighting
+                <SuggestionMark
+                  items={collectMarks(suggestions, (c) => c.distribution.impactPct)}
+                  base={dist.impactPct} kind="pct" onView={onViewSuggestion} />
+              </span>
               <div className="flex items-center gap-2">
                 <NumInput className="!border-input h-10 !bg-background font-semibold" value={dist.impactPct} suffix="% impact"
                   onCommit={(n) => store.updateDistribution(dist.id, { impactPct: Math.min(100, Math.max(0, n)) })} />
@@ -317,17 +369,27 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                 <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b bg-muted/40 px-3 py-2">
                   <span className="font-display text-base font-semibold">{g.name}</span>
                   <div className="flex items-center gap-4">
-                    <label className="flex w-44 items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className="shrink-0">Pool share</span>
-                      <NumInput value={g.allocationPct} suffix="%"
-                        onCommit={(n) => store.updateDistGroupAllocation(dist.id, g.id, n)} />
-                    </label>
-                    <GroupWeightInputs
-                      key={`${g.impactWeight ?? ''}-${g.effortWeight ?? ''}`}
-                      distId={dist.id}
-                      group={g}
-                      effective={pg ? { impact: pg.impactWeight, effort: pg.effortWeight } : null}
-                    />
+                    <span className="flex items-center gap-1">
+                      <label className="flex w-44 items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="shrink-0">Pool share</span>
+                        <NumInput value={g.allocationPct} suffix="%"
+                          onCommit={(n) => store.updateDistGroupAllocation(dist.id, g.id, n)} />
+                      </label>
+                      <SuggestionMark
+                        items={collectMarks(suggestions, (c) => c.groups[g.id]?.allocationPct)}
+                        base={g.allocationPct} kind="pct" onView={onViewSuggestion} />
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <GroupWeightInputs
+                        key={`${g.impactWeight ?? ''}-${g.effortWeight ?? ''}`}
+                        distId={dist.id}
+                        group={g}
+                        effective={pg ? { impact: pg.impactWeight, effort: pg.effortWeight } : null}
+                      />
+                      <SuggestionMark
+                        items={collectMarks(suggestions, (c) => c.groups[g.id]?.impactWeight)}
+                        base={g.impactWeight ?? dist.impactPct} kind="pct" onView={onViewSuggestion} />
+                    </span>
                     {pg && (
                       <span className="num hidden text-xs text-muted-foreground sm:block">
                         {peso(pg.budget)} budget → <b className="text-foreground">{peso(pg.paidOut)}</b> paid
@@ -359,16 +421,31 @@ function DraftEditor({ dist }: { dist: Distribution }) {
                         <tr key={m.id}>
                           <td className="font-medium">{m.name}</td>
                           <td className="r">
-                            <NumInput value={m.hours} suffix="hrs"
-                              onCommit={(n) => store.updateDistMember(dist.id, m.id, { hours: n })} />
+                            <span className="flex items-center justify-end gap-1">
+                              <NumInput value={m.hours} suffix="hrs"
+                                onCommit={(n) => store.updateDistMember(dist.id, m.id, { hours: n })} />
+                              <SuggestionMark
+                                items={collectMarks(suggestions, (c) => c.members[m.id]?.hours)}
+                                base={m.hours} kind="number" onView={onViewSuggestion} />
+                            </span>
                           </td>
                           <td className="r">
-                            <NumInput value={m.multiplier} suffix="%"
-                              onCommit={(n) => store.updateDistMember(dist.id, m.id, { multiplier: n })} />
+                            <span className="flex items-center justify-end gap-1">
+                              <NumInput value={m.multiplier} suffix="%"
+                                onCommit={(n) => store.updateDistMember(dist.id, m.id, { multiplier: n })} />
+                              <SuggestionMark
+                                items={collectMarks(suggestions, (c) => c.members[m.id]?.multiplier)}
+                                base={m.multiplier} kind="pct" onView={onViewSuggestion} />
+                            </span>
                           </td>
                           <td>
-                            <NoteInput value={m.note}
-                              onCommit={(note) => store.updateDistMember(dist.id, m.id, { note })} />
+                            <span className="flex items-start gap-1">
+                              <NoteInput value={m.note}
+                                onCommit={(note) => store.updateDistMember(dist.id, m.id, { note })} />
+                              <SuggestionMark
+                                items={collectMarks(suggestions, (c) => c.members[m.id]?.note)}
+                                base={null} kind="text" onView={onViewSuggestion} />
+                            </span>
                           </td>
                           <td className="r num text-muted-foreground">{pm ? peso(pm.effortAmount) : '—'}</td>
                           <td className="r num text-muted-foreground">{pm ? peso(pm.impactAmount) : '—'}</td>
@@ -397,44 +474,7 @@ function DraftEditor({ dist }: { dist: Distribution }) {
   )
 }
 
-// ─── member note / group weights ─────────────────────────────────────────────
-
-/** Multiline note: auto-expanding textarea, local state while focused, commits on blur. */
-function NoteInput({ value, onCommit }: { value: string | null; onCommit: (note: string | null) => void }) {
-  const [text, setText] = useState(value ?? '')
-  const [focused, setFocused] = useState(false)
-  const [lastValue, setLastValue] = useState(value)
-  const ref = useRef<HTMLTextAreaElement>(null)
-  if (!focused && value !== lastValue) {
-    setLastValue(value)
-    setText(value ?? '')
-  }
-
-  // Grow to fit content (covers browsers without CSS field-sizing: content).
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [text])
-
-  return (
-    <Textarea
-      ref={ref}
-      rows={1}
-      className="min-h-8 min-w-40 resize-none overflow-hidden px-2 py-1.5 text-xs"
-      placeholder="Rating justification"
-      value={text}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        setFocused(false)
-        const next = text.trim() || null
-        if (next !== value) onCommit(next)
-      }}
-    />
-  )
-}
+// ─── group weights ────────────────────────────────────────────────────────────
 
 /** Optional per-group impact/effort weights. Remounted (via key) when the store value changes. */
 function GroupWeightInputs({
