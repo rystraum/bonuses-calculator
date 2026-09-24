@@ -20,7 +20,18 @@ export interface Shareholder {
   employeeId: UUID | null
 }
 
-export type EmployeeClassification = 'full_time' | 'contractual' | 'professional'
+export type EmployeeClassification = 'full_time' | 'contractual' | 'professional' | 'foreigner'
+
+/** Hardcoded withholding rates on bonuses, by employee classification. */
+export const TAX_WITHHELD_RATES: Record<EmployeeClassification, number> = {
+  full_time: 0,
+  contractual: 0.05,
+  professional: 0, // no rate specified — nothing withheld
+  foreigner: 0.25,
+}
+
+/** Hardcoded withholding rate on dividends (shareholders). */
+export const SHAREHOLDER_TAX_WITHHELD_RATE = 0.10
 
 export interface Employee {
   id: UUID

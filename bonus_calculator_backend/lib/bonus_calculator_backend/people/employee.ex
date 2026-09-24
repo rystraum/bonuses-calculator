@@ -2,7 +2,7 @@ defmodule BonusCalculatorBackend.People.Employee do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @classifications ["full_time", "contractual", "professional"]
+  @classifications ["full_time", "contractual", "professional", "foreigner"]
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id

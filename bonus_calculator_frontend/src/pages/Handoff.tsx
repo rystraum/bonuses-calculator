@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { format } from 'date-fns'
 import { ArrowLeft } from 'lucide-react'
-import { EMPTY_RESULT } from '@/lib/model'
+import { EMPTY_RESULT, SHAREHOLDER_TAX_WITHHELD_RATE, TAX_WITHHELD_RATES } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { Money } from '@/components/chrome'
 
@@ -29,13 +29,27 @@ export default function Handoff() {
 
   const result = store.computations[dist.id]
 
-  const totals = (result?.payouts ?? []).reduce(
-    (s, p) => ({
-      bonuses: s.bonuses + p.bonusEffort + p.bonusImpact + p.specialBonus,
-      dividends: s.dividends + p.dividends,
-      total: s.total + p.total,
+  // Hardcoded withholding: bonuses follow the employee classification,
+  // dividends the shareholder rate. Classification comes from the
+  // snapshot's employee (personId is the employee id for merged persons).
+  const rows = (result?.payouts ?? []).map((p) => {
+    const bonuses = p.bonusEffort + p.bonusImpact + p.specialBonus
+    const classification = store.db.employees.find((e) => e.id === p.personId)?.classification ?? null
+    const bonusTax = bonuses * (classification ? TAX_WITHHELD_RATES[classification] : 0)
+    const dividendTax = p.dividends * SHAREHOLDER_TAX_WITHHELD_RATE
+    return { p, bonuses, bonusTax, dividendTax, net: p.total - bonusTax - dividendTax }
+  })
+
+  const totals = rows.reduce(
+    (s, r) => ({
+      bonuses: s.bonuses + r.bonuses,
+      bonusTax: s.bonusTax + r.bonusTax,
+      dividends: s.dividends + r.p.dividends,
+      dividendTax: s.dividendTax + r.dividendTax,
+      total: s.total + r.p.total,
+      net: s.net + r.net,
     }),
-    { bonuses: 0, dividends: 0, total: 0 },
+    { bonuses: 0, bonusTax: 0, dividends: 0, dividendTax: 0, total: 0, net: 0 },
   )
   const r = result ?? EMPTY_RESULT
 
@@ -65,27 +79,38 @@ export default function Handoff() {
             <div className="overflow-x-auto rounded-lg border">
               <table className="ledger">
                 <thead>
-                  <tr><th>Name</th><th className="r">Bonuses</th><th className="r">Dividends</th><th className="r">Total</th></tr>
+                  <tr>
+                    <th>Name</th>
+                    <th className="r">Bonuses</th>
+                    <th className="r">Tax on Bonuses</th>
+                    <th className="r">Dividends</th>
+                    <th className="r">Tax on Dividends</th>
+                    <th className="r">Total</th>
+                    <th className="r">Total Less Taxes</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {r.payouts.map((p) => {
-                    const bonuses = p.bonusEffort + p.bonusImpact + p.specialBonus
-                    return (
-                      <tr key={p.personId ?? p.name}>
-                        <td className="font-medium">{p.name}</td>
-                        <td className="r"><Money value={bonuses} /></td>
-                        <td className="r"><Money value={p.dividends} /></td>
-                        <td className="r"><Money value={p.total} className="font-semibold" /></td>
-                      </tr>
-                    )
-                  })}
+                  {rows.map(({ p, bonuses, bonusTax, dividendTax, net }) => (
+                    <tr key={p.personId ?? p.name}>
+                      <td className="font-medium">{p.name}</td>
+                      <td className="r"><Money value={bonuses} /></td>
+                      <td className="r"><Money value={bonusTax} /></td>
+                      <td className="r"><Money value={p.dividends} /></td>
+                      <td className="r"><Money value={dividendTax} /></td>
+                      <td className="r"><Money value={p.total} className="font-semibold" /></td>
+                      <td className="r"><Money value={net} className="font-semibold" /></td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td className="font-semibold">Total</td>
                     <td className="r"><Money value={totals.bonuses} className="font-semibold" /></td>
+                    <td className="r"><Money value={totals.bonusTax} className="font-semibold" /></td>
                     <td className="r"><Money value={totals.dividends} className="font-semibold" /></td>
+                    <td className="r"><Money value={totals.dividendTax} className="font-semibold" /></td>
                     <td className="r"><Money value={totals.total} className="font-semibold" /></td>
+                    <td className="r"><Money value={totals.net} className="font-semibold" /></td>
                   </tr>
                 </tfoot>
               </table>

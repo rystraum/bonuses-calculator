@@ -16,6 +16,7 @@ const CLASSIFICATION_LABELS: Record<EmployeeClassification, string> = {
   full_time: 'Full-time',
   contractual: 'Contractual',
   professional: 'Professional',
+  foreigner: 'Foreigner',
 }
 
 type StatusFilter = 'active' | 'archived' | 'all'
