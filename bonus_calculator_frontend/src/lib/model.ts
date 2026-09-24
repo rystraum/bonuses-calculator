@@ -26,7 +26,7 @@ export type EmployeeClassification = 'full_time' | 'contractual' | 'professional
 export const TAX_WITHHELD_RATES: Record<EmployeeClassification, number> = {
   full_time: 0,
   contractual: 0.05,
-  professional: 0, // no rate specified — nothing withheld
+  professional: 0.05,
   foreigner: 0.25,
 }
 
