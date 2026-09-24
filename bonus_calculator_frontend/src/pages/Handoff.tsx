@@ -5,7 +5,7 @@ import { jsPDF } from 'jspdf'
 import { autoTable } from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { ArrowLeft, FileDown, FileSpreadsheet } from 'lucide-react'
-import { EMPTY_RESULT, SHAREHOLDER_TAX_WITHHELD_RATE, TAX_WITHHELD_RATES } from '@/lib/model'
+import { EMPTY_RESULT, SHAREHOLDER_TAX_WITHHELD_RATE, TAX_WITHHELD_RATES, type EmployeeClassification } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { Money } from '@/components/chrome'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,26 @@ import { Button } from '@/components/ui/button'
 const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 const money2 = (n: number) => n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const round2 = (n: number) => Math.round(n * 100) / 100
+
+const GROUP_LABELS: Record<EmployeeClassification, string> = {
+  full_time: 'FTE',
+  contractual: 'Contractuals',
+  professional: 'Professionals',
+  foreigner: 'Foreigners',
+}
+const GROUP_ORDER: EmployeeClassification[] = ['full_time', 'contractual', 'professional', 'foreigner']
+
+interface BonusRow { name: string; bonus: number; tax: number; net: number }
+interface Section { label: string; rows: BonusRow[]; totals: BonusRow }
+
+const summarize = (rows: BonusRow[]): BonusRow => ({
+  name: 'Total',
+  bonus: rows.reduce((s, r) => s + r.bonus, 0),
+  tax: rows.reduce((s, r) => s + r.tax, 0),
+  net: rows.reduce((s, r) => s + r.net, 0),
+})
+
+interface ShareholderRow { name: string; shares: number; dividends: number; tax: number; net: number }
 
 export default function Handoff() {
   const { id } = useParams<{ id: string }>()
@@ -64,29 +84,56 @@ export default function Handoff() {
   // Hardcoded withholding: bonuses follow the employee classification,
   // dividends the shareholder rate. Classification comes from the
   // snapshot's employee (personId is the employee id for merged persons).
-  const rows = (result?.payouts ?? []).map((p) => {
-    const bonuses = p.bonusEffort + p.bonusImpact + p.specialBonus
-    const classification = store.db.employees.find((e) => e.id === p.personId)?.classification ?? null
-    const bonusTax = bonuses * (classification ? TAX_WITHHELD_RATES[classification] : 0)
-    const dividendTax = p.dividends * SHAREHOLDER_TAX_WITHHELD_RATE
-    return { p, bonuses, bonusTax, dividendTax, net: p.total - bonusTax - dividendTax }
+  const classificationOf = (personId: string | null) =>
+    store.db.employees.find((e) => e.id === personId)?.classification ?? null
+
+  const bonusRowFor = (name: string, bonus: number, tax: number): BonusRow => ({
+    name, bonus, tax, net: bonus - tax,
   })
 
-  const totals = rows.reduce(
-    (s, r) => ({
-      bonuses: s.bonuses + r.bonuses,
-      bonusTax: s.bonusTax + r.bonusTax,
-      dividends: s.dividends + r.p.dividends,
-      dividendTax: s.dividendTax + r.dividendTax,
-      total: s.total + r.p.total,
-      net: s.net + r.net,
+  // Bonus recipients grouped by classification; unclassified people
+  // (including custom-named special bonus recipients) fall in the last bucket.
+  const grouped: Section[] = [
+    ...GROUP_ORDER.map((cls) => {
+      const rows = (result?.payouts ?? [])
+        .filter((p) => {
+          const bonus = p.bonusEffort + p.bonusImpact + p.specialBonus
+          return bonus > 0 && classificationOf(p.personId) === cls
+        })
+        .map((p) => {
+          const bonus = p.bonusEffort + p.bonusImpact + p.specialBonus
+          return bonusRowFor(p.name, bonus, bonus * TAX_WITHHELD_RATES[cls])
+        })
+      return { label: GROUP_LABELS[cls], rows, totals: summarize(rows) }
     }),
-    { bonuses: 0, bonusTax: 0, dividends: 0, dividendTax: 0, total: 0, net: 0 },
-  )
-  const r = result ?? EMPTY_RESULT
-  const dividends = r.dividends
-  const sharesTotal = dividends.reduce((s, d) => s + d.shares, 0)
-  const dividendTotal = dividends.reduce((s, d) => s + d.amount, 0)
+    (() => {
+      const rows = (result?.payouts ?? [])
+        .filter((p) => {
+          const bonus = p.bonusEffort + p.bonusImpact + p.specialBonus
+          return bonus > 0 && classificationOf(p.personId) === null
+        })
+        .map((p) => {
+          const bonus = p.bonusEffort + p.bonusImpact + p.specialBonus
+          return bonusRowFor(p.name, bonus, 0)
+        })
+      return { label: 'Unclassified', rows, totals: summarize(rows) }
+    })(),
+  ].filter((s) => s.rows.length > 0)
+
+  const shareholderRows: ShareholderRow[] = (result?.dividends ?? []).map((d) => ({
+    name: d.name,
+    shares: d.shares,
+    dividends: d.amount,
+    tax: d.amount * SHAREHOLDER_TAX_WITHHELD_RATE,
+    net: d.amount * (1 - SHAREHOLDER_TAX_WITHHELD_RATE),
+  }))
+  const shareholderTotals: ShareholderRow = {
+    name: 'Total',
+    shares: shareholderRows.reduce((s, r) => s + r.shares, 0),
+    dividends: shareholderRows.reduce((s, r) => s + r.dividends, 0),
+    tax: shareholderRows.reduce((s, r) => s + r.tax, 0),
+    net: shareholderRows.reduce((s, r) => s + r.net, 0),
+  }
 
   const downloadPdf = () => {
     const doc = new jsPDF({ orientation: 'landscape' })
@@ -104,10 +151,7 @@ export default function Handoff() {
       doc.text(headerLine, 14, 21)
     }
 
-    let lastY = 28
-    const trackY = (data: { cursor?: { y: number } | null }) => {
-      if (data.cursor) lastY = data.cursor.y
-    }
+    let lastY = 24
     const tableBase = {
       margin: { left: 14, right: 14, top: 26 },
       theme: 'grid' as const,
@@ -116,28 +160,36 @@ export default function Handoff() {
       headStyles: { fillColor: [41, 37, 36] as [number, number, number], textColor: 255 },
       footStyles: { fillColor: [231, 229, 228] as [number, number, number], textColor: 28, fontStyle: 'bold' as const },
       didDrawPage: (data: { cursor?: { y: number } | null }) => {
-        trackY(data)
+        if (data.cursor) lastY = data.cursor.y
         drawHeader()
       },
     }
-
-    autoTable(doc, {
-      ...tableBase,
-      head: [['Name', 'Bonuses', 'Tax on Bonuses', 'Dividends', 'Tax on Dividends', 'Total', 'Total Less Taxes']],
-      body: rows.map(({ p, bonuses, bonusTax, dividendTax, net }) => [
-        p.name, money2(bonuses), money2(bonusTax), money2(p.dividends), money2(dividendTax), money2(p.total), money2(net),
-      ]),
-      foot: [['Total', money2(totals.bonuses), money2(totals.bonusTax), money2(totals.dividends), money2(totals.dividendTax), money2(totals.total), money2(totals.net)]],
-    })
-
-    if (dividends.length > 0) {
+    const drawSection = (label: string, head: string[][], body: string[][], foot: string[][]) => {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(11)
+      doc.setTextColor(28, 25, 23)
+      doc.text(label, 14, lastY + 6)
       autoTable(doc, {
         ...tableBase,
-        startY: lastY + 10,
-        head: [['Name', 'Shares', 'Dividend']],
-        body: dividends.map((d) => [d.name, d.shares.toLocaleString(), money2(d.amount)]),
-        foot: [['Total', sharesTotal.toLocaleString(), money2(dividendTotal)]],
+        startY: lastY + 9,
+        head, body, foot,
       })
+      lastY += 0 // lastY updated by didDrawPage
+    }
+
+    for (const sec of grouped) {
+      drawSection(sec.label,
+        [['Name', 'Bonus', 'Tax', 'Total Less Tax']],
+        sec.rows.map((row) => [row.name, money2(row.bonus), money2(row.tax), money2(row.net)]),
+        [['Total', money2(sec.totals.bonus), money2(sec.totals.tax), money2(sec.totals.net)]],
+      )
+    }
+    if (shareholderRows.length > 0) {
+      drawSection('Shareholders',
+        [['Name', 'Shares', 'Dividends', 'Tax', 'Total Less Tax']],
+        shareholderRows.map((row) => [row.name, row.shares.toLocaleString(), money2(row.dividends), money2(row.tax), money2(row.net)]),
+        [['Total', shareholderTotals.shares.toLocaleString(), money2(shareholderTotals.dividends), money2(shareholderTotals.tax), money2(shareholderTotals.net)]],
+      )
     }
 
     const pages = doc.getNumberOfPages()
@@ -154,24 +206,24 @@ export default function Handoff() {
   const downloadExcel = () => {
     const wb = XLSX.utils.book_new()
 
-    const personSheet = XLSX.utils.aoa_to_sheet([
-      ['Name', 'Bonuses', 'Tax on Bonuses', 'Dividends', 'Tax on Dividends', 'Total', 'Total Less Taxes'],
-      ...rows.map(({ p, bonuses, bonusTax, dividendTax, net }) => [
-        p.name, round2(bonuses), round2(bonusTax), round2(p.dividends), round2(dividendTax), round2(p.total), round2(net),
-      ]),
-      ['Total', round2(totals.bonuses), round2(totals.bonusTax), round2(totals.dividends), round2(totals.dividendTax), round2(totals.total), round2(totals.net)],
-    ])
-    personSheet['!cols'] = [{ wch: 30 }, ...Array.from({ length: 6 }, () => ({ wch: 16 }))]
-    XLSX.utils.book_append_sheet(wb, personSheet, 'Per-person totals')
-
-    if (dividends.length > 0) {
-      const shSheet = XLSX.utils.aoa_to_sheet([
-        ['Name', 'Shares', 'Dividend'],
-        ...dividends.map((d) => [d.name, d.shares, round2(d.amount)]),
-        ['Total', sharesTotal, round2(dividendTotal)],
+    for (const sec of grouped) {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['Name', 'Bonus', 'Tax', 'Total Less Tax'],
+        ...sec.rows.map((row) => [row.name, round2(row.bonus), round2(row.tax), round2(row.net)]),
+        ['Total', round2(sec.totals.bonus), round2(sec.totals.tax), round2(sec.totals.net)],
       ])
-      shSheet['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 16 }]
-      XLSX.utils.book_append_sheet(wb, shSheet, 'Shareholders')
+      sheet['!cols'] = [{ wch: 30 }, ...Array.from({ length: 3 }, () => ({ wch: 16 }))]
+      XLSX.utils.book_append_sheet(wb, sheet, sec.label)
+    }
+
+    if (shareholderRows.length > 0) {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['Name', 'Shares', 'Dividends', 'Tax', 'Total Less Tax'],
+        ...shareholderRows.map((row) => [row.name, row.shares, round2(row.dividends), round2(row.tax), round2(row.net)]),
+        ['Total', shareholderTotals.shares, round2(shareholderTotals.dividends), round2(shareholderTotals.tax), round2(shareholderTotals.net)],
+      ])
+      sheet['!cols'] = [{ wch: 30 }, { wch: 12 }, ...Array.from({ length: 3 }, () => ({ wch: 16 }))]
+      XLSX.utils.book_append_sheet(wb, sheet, 'Shareholders')
     }
 
     XLSX.writeFile(wb, `${fileStamp}.xlsx`)
@@ -208,90 +260,79 @@ export default function Handoff() {
         <div className="py-10 text-center text-sm text-muted-foreground">Loading the computation…</div>
       ) : (
         <>
-          <section>
-            <h2 className="kicker mb-2">Per-person totals</h2>
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="ledger min-w-[52rem] print:min-w-0">
-                <thead>
-                  <tr className="hidden print:table-row">
-                    <th colSpan={7} className="!p-0 text-left normal-case tracking-normal">{printHeader}</th>
-                  </tr>
-                  <tr>
-                    <th>Name</th>
-                    <th className="r">Bonuses</th>
-                    <th className="r">Tax on Bonuses</th>
-                    <th className="r">Dividends</th>
-                    <th className="r">Tax on Dividends</th>
-                    <th className="r">Total</th>
-                    <th className="r">Total Less Taxes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ p, bonuses, bonusTax, dividendTax, net }) => (
-                    <tr key={p.personId ?? p.name}>
-                      <td className="font-medium">{p.name}</td>
-                      <td className="r"><Money value={bonuses} /></td>
-                      <td className="r"><Money value={bonusTax} /></td>
-                      <td className="r"><Money value={p.dividends} /></td>
-                      <td className="r"><Money value={dividendTax} /></td>
-                      <td className="r"><Money value={p.total} className="font-semibold" /></td>
-                      <td className="r"><Money value={net} className="font-semibold" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td className="font-semibold">Total</td>
-                    <td className="r"><Money value={totals.bonuses} className="font-semibold" /></td>
-                    <td className="r"><Money value={totals.bonusTax} className="font-semibold" /></td>
-                    <td className="r"><Money value={totals.dividends} className="font-semibold" /></td>
-                    <td className="r"><Money value={totals.dividendTax} className="font-semibold" /></td>
-                    <td className="r"><Money value={totals.total} className="font-semibold" /></td>
-                    <td className="r"><Money value={totals.net} className="font-semibold" /></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
+          {grouped.length === 0 && shareholderRows.length === 0 && (
+            <div className="py-10 text-center text-sm text-muted-foreground">Nothing to hand off yet.</div>
+          )}
 
-          <section>
-            <h2 className="kicker mb-2">Shareholders</h2>
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="ledger min-w-[36rem] print:min-w-0">
-                <thead>
-                  <tr className="hidden print:table-row">
-                    <th colSpan={3} className="!p-0 text-left normal-case tracking-normal">{printHeader}</th>
-                  </tr>
-                  <tr><th>Name</th><th className="r">Shares</th><th className="r">Dividend</th></tr>
-                </thead>
-                <tbody>
-                  {r.dividends.map((d) => (
-                    <tr key={d.shareholderId}>
-                      <td className="font-medium">{d.name}</td>
-                      <td className="r num">{d.shares.toLocaleString()}</td>
-                      <td className="r"><Money value={d.amount} className="font-semibold" /></td>
+          {grouped.map((sec) => (
+            <section key={sec.label}>
+              <h2 className="kicker mb-2">{sec.label}</h2>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="ledger min-w-[40rem] print:min-w-0">
+                  <thead>
+                    <tr className="hidden print:table-row">
+                      <th colSpan={4} className="!p-0 text-left normal-case tracking-normal">{printHeader}</th>
                     </tr>
-                  ))}
-                  {r.dividends.length === 0 && (
-                    <tr><td colSpan={3} className="py-6 text-center text-sm text-muted-foreground">No shareholders in this distribution.</td></tr>
-                  )}
-                </tbody>
-                {r.dividends.length > 0 && (
+                    <tr><th>Name</th><th className="r">Bonus</th><th className="r">Tax</th><th className="r">Total Less Tax</th></tr>
+                  </thead>
+                  <tbody>
+                    {sec.rows.map((row) => (
+                      <tr key={row.name}>
+                        <td className="font-medium">{row.name}</td>
+                        <td className="r"><Money value={row.bonus} /></td>
+                        <td className="r"><Money value={row.tax} /></td>
+                        <td className="r"><Money value={row.net} className="font-semibold" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
                   <tfoot>
                     <tr>
                       <td className="font-semibold">Total</td>
-                      <td className="r num font-semibold">
-                        {r.dividends.reduce((s, d) => s + d.shares, 0).toLocaleString()}
-                      </td>
-                      <td className="r">
-                        <Money value={r.dividends.reduce((s, d) => s + d.amount, 0)} className="font-semibold" />
-                      </td>
+                      <td className="r"><Money value={sec.totals.bonus} className="font-semibold" /></td>
+                      <td className="r"><Money value={sec.totals.tax} className="font-semibold" /></td>
+                      <td className="r"><Money value={sec.totals.net} className="font-semibold" /></td>
                     </tr>
                   </tfoot>
-                )}
-              </table>
-            </div>
-          </section>
+                </table>
+              </div>
+            </section>
+          ))}
+
+          {shareholderRows.length > 0 && (
+            <section>
+              <h2 className="kicker mb-2">Shareholders</h2>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="ledger min-w-[44rem] print:min-w-0">
+                  <thead>
+                    <tr className="hidden print:table-row">
+                      <th colSpan={5} className="!p-0 text-left normal-case tracking-normal">{printHeader}</th>
+                    </tr>
+                    <tr><th>Name</th><th className="r">Shares</th><th className="r">Dividends</th><th className="r">Tax</th><th className="r">Total Less Tax</th></tr>
+                  </thead>
+                  <tbody>
+                    {shareholderRows.map((row) => (
+                      <tr key={row.name}>
+                        <td className="font-medium">{row.name}</td>
+                        <td className="r num">{row.shares.toLocaleString()}</td>
+                        <td className="r"><Money value={row.dividends} /></td>
+                        <td className="r"><Money value={row.tax} /></td>
+                        <td className="r"><Money value={row.net} className="font-semibold" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="font-semibold">Total</td>
+                      <td className="r num font-semibold">{shareholderTotals.shares.toLocaleString()}</td>
+                      <td className="r"><Money value={shareholderTotals.dividends} className="font-semibold" /></td>
+                      <td className="r"><Money value={shareholderTotals.tax} className="font-semibold" /></td>
+                      <td className="r"><Money value={shareholderTotals.net} className="font-semibold" /></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>
