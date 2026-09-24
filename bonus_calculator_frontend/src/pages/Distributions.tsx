@@ -163,7 +163,12 @@ export default function Distributions() {
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="sm" asChild>
                       <Link to={`/distributions/${d.id}`}>
-                        {d.status === 'drafted' ? 'Edit' : 'View'} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                        {d.status !== 'drafted'
+                          ? 'View'
+                          : d.createdBy != null && d.createdBy.id !== sessionUserId
+                            ? 'Review'
+                            : 'Edit'}{' '}
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
                       </Link>
                     </Button>
                     {d.status === 'drafted' && (d.createdBy == null || d.createdBy.id === sessionUserId) && (
