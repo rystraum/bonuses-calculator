@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type {
-  DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, Suggestion,
+  Approval, DB, Distribution, DistributionResult, EmployeeClassification, GroupResult, PersonPayout, Suggestion,
   SuggestionChanges, UUID,
 } from './model'
 
@@ -102,6 +102,10 @@ interface ApiSpecialBonus {
   name: string | null; amount: string; note: string | null
 }
 interface ApiUserRef { id: string; username: string }
+interface ApiApproval {
+  id: string; distribution_id: string; user: ApiUserRef
+  selfie: string; approved_at: string
+}
 interface ApiSuggestion {
   id: string; distribution_id: string; user: ApiUserRef
   explanation: string; changes: ApiSuggestionChanges
@@ -318,6 +322,10 @@ function mapSuggestion(s: ApiSuggestion): Suggestion {
   }
 }
 
+function mapApproval(a: ApiApproval): Approval {
+  return { id: a.id, user: a.user, selfie: a.selfie, approvedAt: a.approved_at }
+}
+
 /** UI model → snake_case wire shape accepted by simulate / suggestion upsert. */
 export function changesToWire(changes: SuggestionChanges): Record<string, unknown> {
   const wire: Record<string, unknown> = {}
@@ -407,6 +415,12 @@ interface StoreCtx {
   /** Upserts the current user's suggestion set; resolves to an error message or null. */
   submitSuggestion: (distId: UUID, explanation: string, changes: SuggestionChanges) => Promise<string | null>
   deleteSuggestion: (distId: UUID, suggestionId: UUID) => Promise<string | null>
+  // approvals
+  approvals: Record<UUID, Approval[]>
+  loadApprovals: (distId: UUID) => Promise<void>
+  /** selfie is a full data URL captured from the camera; resolves to an error message or null. */
+  approveDistribution: (distId: UUID, selfie: string) => Promise<string | null>
+  rescindApproval: (distId: UUID) => Promise<string | null>
   // users
   loadUsers: () => Promise<void>
   createUser: (username: string, password: string) => Promise<string | null>
@@ -466,6 +480,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [bootstrapping, setBootstrapping] = useState(() => storedSession !== null)
   const [computations, setComputations] = useState<Record<UUID, DistributionResult>>({})
   const [suggestions, setSuggestions] = useState<Record<UUID, Suggestion[]>>({})
+  const [approvals, setApprovals] = useState<Record<UUID, Approval[]>>({})
   const [simulations, setSimulations] = useState<Record<UUID, DistributionResult>>({})
   const [sessionUserId, setSessionUserId] = useState<UUID | null>(storedSession?.id ?? null)
   const [seedImportResult, setSeedImportResult] = useState<SeedImportResult | null>(null)
@@ -510,6 +525,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const loadSuggestions = useCallback(async (distId: UUID) => {
     const list = await apiFetch<ApiSuggestion[]>(`/distributions/${distId}/suggestions`)
     setSuggestions((prev) => ({ ...prev, [distId]: list.map(mapSuggestion) }))
+  }, [])
+
+  const loadApprovals = useCallback(async (distId: UUID) => {
+    const list = await apiFetch<ApiApproval[]>(`/distributions/${distId}/approvals`)
+    setApprovals((prev) => ({ ...prev, [distId]: list.map(mapApproval) }))
   }, [])
 
   // Debounced live preview while composing a suggestion (~300ms).
@@ -587,6 +607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDb(EMPTY_DB)
     setComputations({})
     setSuggestions({})
+    setApprovals({})
     setSimulations({})
     setBootstrapping(false)
   }, [])
@@ -653,14 +674,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDb(EMPTY_DB)
       setComputations({})
       setSuggestions({})
+      setApprovals({})
       setSimulations({})
     })
   }, [])
 
   const api = useMemo<StoreCtx>(() => ({
-    db, computations, suggestions, simulations, sessionUserId, bootstrapping,
+    db, computations, suggestions, approvals, simulations, sessionUserId, bootstrapping,
     login, logout, refreshDistribution, getComputation,
-    loadSuggestions, simulate, fetchSuggestion, loadUsers,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals,
 
     submitSuggestion: async (distId, explanation, changes) => {
       try {
@@ -681,6 +703,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     deleteSuggestion: (distId, suggestionId) =>
       run(() => apiFetch(`/suggestions/${suggestionId}`, { method: 'DELETE' }), () => loadSuggestions(distId)),
+
+    approveDistribution: (distId, selfie) =>
+      run(
+        () => apiFetch(`/distributions/${distId}/approval`, { method: 'POST', body: { selfie } }),
+        () => loadApprovals(distId),
+      ),
+    rescindApproval: (distId) =>
+      run(
+        () => apiFetch(`/distributions/${distId}/approval`, { method: 'DELETE' }),
+        () => loadApprovals(distId),
+      ),
 
     createUser: (username, password) =>
       run(
@@ -873,9 +906,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
   }), [
-    db, computations, suggestions, simulations, sessionUserId, bootstrapping, login, logout, seedImportResult,
+    db, computations, suggestions, approvals, simulations, sessionUserId, bootstrapping, login, logout, seedImportResult,
     refreshDistribution, getComputation, reloadCore, reloadDistributions, loadAll, run, scheduleRefresh,
-    loadSuggestions, simulate, fetchSuggestion, loadUsers,
+    loadSuggestions, simulate, fetchSuggestion, loadUsers, loadApprovals,
   ])
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>

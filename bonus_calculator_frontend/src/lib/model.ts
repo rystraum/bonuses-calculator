@@ -199,6 +199,17 @@ export interface Suggestion {
   updatedAt: string
 }
 
+// ─── draft approvals ──────────────────────────────────────────────────────────
+// A non-owner's sign-off on a drafted distribution; the selfie is a full
+// "data:image/jpeg;base64,..." data URL captured from the camera at approval time.
+
+export interface Approval {
+  id: UUID
+  user: { id: UUID; username: string }
+  selfie: string
+  approvedAt: string // ISO
+}
+
 export interface DB {
   users: User[]
   shareholders: Shareholder[]
