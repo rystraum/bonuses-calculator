@@ -72,4 +72,40 @@ defmodule BonusCalculatorBackendWeb.UserControllerTest do
     conn = patch(conn, ~p"/api/user", %{username: "new@example.com"})
     assert %{"error" => "unauthorized"} = json_response(conn, 401)
   end
+
+  test "GET /api/users lists users", %{conn: conn, token: token, user: user} do
+    conn = conn |> authed_conn(token) |> get(~p"/api/users")
+
+    assert %{"data" => [%{"id" => id, "username" => "admin@example.com"}]} =
+             json_response(conn, 200)
+
+    assert id == user.id
+  end
+
+  test "POST /api/users creates a user", %{conn: conn, token: token} do
+    conn =
+      conn
+      |> authed_conn(token)
+      |> post(~p"/api/users", %{username: "new@example.com", password: "secret123"})
+
+    assert %{"data" => %{"user" => %{"id" => id, "username" => "new@example.com"}}} =
+             json_response(conn, 201)
+
+    assert {:ok, created} = Accounts.authenticate("new@example.com", "secret123")
+    assert created.id == id
+  end
+
+  test "POST /api/users rejects a duplicate username", %{conn: conn, token: token} do
+    conn =
+      conn
+      |> authed_conn(token)
+      |> post(~p"/api/users", %{username: "admin@example.com", password: "secret123"})
+
+    assert %{"errors" => %{"username" => [_ | _]}} = json_response(conn, 422)
+  end
+
+  test "POST /api/users requires auth", %{conn: conn} do
+    conn = post(conn, ~p"/api/users", %{username: "new@example.com", password: "secret123"})
+    assert %{"error" => "unauthorized"} = json_response(conn, 401)
+  end
 end

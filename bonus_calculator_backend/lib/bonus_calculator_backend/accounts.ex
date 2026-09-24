@@ -8,6 +8,10 @@ defmodule BonusCalculatorBackend.Accounts do
   alias BonusCalculatorBackend.Accounts.{ApiToken, User}
   alias BonusCalculatorBackend.Repo
 
+  def list_users do
+    Repo.all(from u in User, order_by: [asc: u.username])
+  end
+
   def create_user(attrs) do
     %User{}
     |> User.changeset(attrs)
