@@ -144,5 +144,13 @@
   @page {
     size: A4 landscape;
     margin: 12mm;
+    /* Page numbers: honored by CSS paged-media engines (WeasyPrint, Prince);
+       Chrome ignores margin boxes — enable "Headers and footers" in its
+       print dialog instead. */
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 9px;
+      color: #666;
+    }
   }
 }
