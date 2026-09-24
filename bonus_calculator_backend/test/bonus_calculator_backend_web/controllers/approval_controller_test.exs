@@ -134,6 +134,71 @@ defmodule BonusCalculatorBackendWeb.ApprovalControllerTest do
     end
   end
 
+  describe "GET /api/distributions/:id/participation" do
+    test "returns all users with their seen/suggested/approved state", %{
+      conn: conn,
+      owner_token: owner_token,
+      other_token: other_token,
+      owner: owner,
+      other: other,
+      distribution: distribution
+    } do
+      {:ok, _} =
+        Distributions.upsert_suggestion(distribution, other, %{
+          "explanation" => "more",
+          "changes" => %{}
+        })
+
+      {:ok, approval} = Distributions.approve_distribution(distribution, other, "selfie")
+
+      # The owner opening the distribution records their view.
+      conn =
+        conn
+        |> authed_conn(owner_token)
+        |> get(~p"/api/distributions/#{distribution.id}")
+
+      assert %{"data" => %{"id" => _}} = json_response(conn, 200)
+
+      conn =
+        build_conn()
+        |> authed_conn(other_token)
+        |> get(~p"/api/distributions/#{distribution.id}/participation")
+
+      assert %{"data" => [other_entry, owner_entry]} = json_response(conn, 200)
+
+      assert %{
+               "user" => %{"id" => other_id, "username" => "other"},
+               "seen_at" => nil,
+               "suggested_at" => suggested_at,
+               "approval" => %{
+                 "id" => approval_id,
+                 "selfie" => "selfie",
+                 "approved_at" => approved_at
+               }
+             } = other_entry
+
+      assert other_id == other.id
+      assert is_binary(suggested_at)
+      assert approval_id == approval.id
+      assert is_binary(approved_at)
+
+      assert %{
+               "user" => %{"id" => owner_id, "username" => "owner"},
+               "suggested_at" => nil,
+               "approval" => nil
+             } = owner_entry
+
+      assert owner_id == owner.id
+      assert is_binary(owner_entry["seen_at"])
+    end
+
+    test "requires auth", %{conn: conn, distribution: distribution} do
+      conn = get(conn, ~p"/api/distributions/#{distribution.id}/participation")
+
+      assert %{"error" => "unauthorized"} = json_response(conn, 401)
+    end
+  end
+
   describe "DELETE /api/distributions/:id/approval" do
     test "the author can rescind; without an approval it 404s", %{
       conn: conn,

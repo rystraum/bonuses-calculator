@@ -13,6 +13,13 @@ defmodule BonusCalculatorBackendWeb.ApprovalController do
     json(conn, %{data: Enum.map(approvals, &approval_json/1)})
   end
 
+  def participation(conn, %{"id" => id}) do
+    distribution = Distributions.get_distribution!(id)
+    participation = Distributions.participation(distribution)
+
+    json(conn, %{data: Enum.map(participation, &participation_json/1)})
+  end
+
   def approve(conn, %{"id" => id} = params) do
     distribution = Distributions.get_distribution!(id)
 
@@ -43,5 +50,18 @@ defmodule BonusCalculatorBackendWeb.ApprovalController do
       selfie: approval.selfie,
       approved_at: approval.approved_at
     }
+  end
+
+  defp participation_json(entry) do
+    %{
+      user: %{id: entry.user.id, username: entry.user.username},
+      seen_at: entry.seen_at,
+      suggested_at: entry.suggested_at,
+      approval: entry.approval && approval_brief_json(entry.approval)
+    }
+  end
+
+  defp approval_brief_json(approval) do
+    %{id: approval.id, selfie: approval.selfie, approved_at: approval.approved_at}
   end
 end

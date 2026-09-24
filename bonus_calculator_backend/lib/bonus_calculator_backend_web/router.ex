@@ -43,6 +43,7 @@ defmodule BonusCalculatorBackendWeb.Router do
     delete "/suggestions/:id", SuggestionController, :delete
 
     get "/distributions/:id/approvals", ApprovalController, :index
+    get "/distributions/:id/participation", ApprovalController, :participation
     post "/distributions/:id/approval", ApprovalController, :approve
     delete "/distributions/:id/approval", ApprovalController, :rescind
 
