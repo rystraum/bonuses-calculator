@@ -1,16 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react'
-import { format } from 'date-fns'
 import { useStore } from '@/lib/store'
-import type { EmployeeClassification } from '@/lib/model'
+import { fmtDateTime, type EmployeeClassification } from '@/lib/model'
 import { AppShell, SectionHeader } from '@/components/chrome'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-
-const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 
 const CLASSIFICATION_LABELS: Record<EmployeeClassification, string> = {
   full_time: 'Full-time',

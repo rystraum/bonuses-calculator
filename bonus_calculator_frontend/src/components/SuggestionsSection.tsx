@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Lightbulb, Trash2 } from 'lucide-react'
-import { format } from 'date-fns'
-import { peso, pct, type Distribution, type DistributionResult, type Suggestion, type UUID } from '@/lib/model'
+import { fmtDateTime, peso, pct, type Distribution, type DistributionResult, type Suggestion, type UUID } from '@/lib/model'
 import { countChanges, useStore } from '@/lib/store'
 import { describeChanges, type ChangeRow, type SuggestionMarkItem } from '@/lib/suggestions'
 import { SectionHeader } from '@/components/chrome'
@@ -12,8 +11,6 @@ import {
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-
-const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 
 // ─── change table ─────────────────────────────────────────────────────────────
 

@@ -5,12 +5,11 @@ import { jsPDF } from 'jspdf'
 import { autoTable } from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { ArrowLeft, FileDown, FileSpreadsheet } from 'lucide-react'
-import { SHAREHOLDER_TAX_WITHHELD_RATE, TAX_WITHHELD_RATES, type EmployeeClassification } from '@/lib/model'
+import { SHAREHOLDER_TAX_WITHHELD_RATE, TAX_WITHHELD_RATES, fmtDateTime, type EmployeeClassification } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { Money } from '@/components/chrome'
 import { Button } from '@/components/ui/button'
 
-const fmtDateTime = (iso: string) => format(new Date(iso), "MMM d, yyyy 'at' h:mm a")
 const money2 = (n: number) => n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const round2 = (n: number) => Math.round(n * 100) / 100
 
