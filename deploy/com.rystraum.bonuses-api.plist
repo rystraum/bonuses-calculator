@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.rystraum.bonuses-api</string>
+
+	<key>UserName</key>
+	<string>rystraum</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Volumes/Code/personal/bonuses-calculator/deploy/bonuses-api.start.sh</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Volumes/Code/personal/bonuses-calculator/bonus_calculator_backend</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/rystraum</string>
+		<key>LANG</key>
+		<string>en_US.UTF-8</string>
+		<key>PATH</key>
+		<string>/Users/rystraum/.asdf/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>KeepAlive</key>
+	<dict>
+		<key>Crashed</key>
+		<true/>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>StandardOutPath</key>
+	<string>/Users/rystraum/Library/Logs/bonuses/bonuses-api.out.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/rystraum/Library/Logs/bonuses/bonuses-api.err.log</string>
+</dict>
+</plist>
