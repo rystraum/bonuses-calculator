@@ -281,6 +281,8 @@ interface StoreCtx {
   db: DB
   computations: Record<UUID, DistributionResult>
   sessionUserId: UUID | null
+  /** True while a persisted session's initial data load is still in flight. */
+  bootstrapping: boolean
   login: (username: string, password: string) => Promise<string | null>
   logout: () => void
   /** PATCHes the current user's username/password; resolves to an error message or null. */
@@ -341,6 +343,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ? { ...EMPTY_DB, users: [{ id: storedSession.id, username: storedSession.username, password: '', name: storedSession.username }] }
       : EMPTY_DB,
   )
+  const [bootstrapping, setBootstrapping] = useState(() => storedSession !== null)
   const [computations, setComputations] = useState<Record<UUID, DistributionResult>>({})
   const [sessionUserId, setSessionUserId] = useState<UUID | null>(storedSession?.id ?? null)
   const [seedImportResult, setSeedImportResult] = useState<SeedImportResult | null>(null)
@@ -422,12 +425,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setSessionUserId(null)
     setDb(EMPTY_DB)
     setComputations({})
+    setBootstrapping(false)
   }, [])
 
   useEffect(() => {
     onUnauthorized = handleUnauthorized
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load: setState only fires after the async fetches resolve
-    if (storedSession) void loadAll()
+    if (storedSession) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load: setState only fires after the async fetches resolve
+      loadAll()
+        .catch(() => {})
+        .finally(() => setBootstrapping(false))
+    }
     return () => { onUnauthorized = null }
   }, [loadAll, handleUnauthorized])
 
@@ -485,7 +493,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const api = useMemo<StoreCtx>(() => ({
-    db, computations, sessionUserId,
+    db, computations, sessionUserId, bootstrapping,
     login, logout, refreshDistribution, getComputation,
 
     updateAccount: async (patch) => {
@@ -673,7 +681,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
   }), [
-    db, computations, sessionUserId, login, logout, seedImportResult,
+    db, computations, sessionUserId, bootstrapping, login, logout, seedImportResult,
     refreshDistribution, getComputation, reloadCore, reloadDistributions, loadAll, run, scheduleRefresh,
   ])
 

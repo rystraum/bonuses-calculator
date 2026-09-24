@@ -31,7 +31,18 @@ export default function DistributionDetail() {
     if (id) refreshDistribution(id).catch(() => {})
   }, [refreshDistribution, id])
 
-  if (!dist) return <Navigate to="/" replace />
+  if (!dist) {
+    // First render after a refresh has an empty db until the initial load
+    // resolves — wait for it instead of bouncing to the list.
+    if (store.bootstrapping) {
+      return (
+        <AppShell>
+          <div className="py-10 text-center text-sm text-muted-foreground">Loading distribution…</div>
+        </AppShell>
+      )
+    }
+    return <Navigate to="/" replace />
+  }
 
   return (
     <AppShell>
