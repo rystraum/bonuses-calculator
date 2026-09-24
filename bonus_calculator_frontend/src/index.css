@@ -111,6 +111,9 @@
     border-bottom: 1px solid hsl(var(--border));
     vertical-align: middle;
   }
+  .ledger tbody tr:nth-child(even) td {
+    background: hsl(var(--muted) / 0.35);
+  }
   .ledger tbody tr:hover td {
     background: hsl(45 14% 93% / 0.55);
   }
