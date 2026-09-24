@@ -175,7 +175,7 @@ export const EMPTY_RESULT: DistributionResult = {
 export const uid = (): UUID => crypto.randomUUID()
 
 export const peso = (n: number): string =>
-  '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export const pct = (n: number): string =>
   n.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%'
