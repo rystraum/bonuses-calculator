@@ -128,10 +128,10 @@ function DetailContent({ dist }: { dist: Distribution }) {
 
       {dist.status === 'drafted' ? (
         <div className="space-y-10">
+          <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
           {isOwner
             ? <DraftEditor dist={dist} onViewSuggestion={setViewSuggestionId} />
             : <SuggestionEditor dist={dist} state={suggestionState} />}
-          <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
           {isOwner && <ParticipationSection dist={dist} />}
         </div>
       ) : (
