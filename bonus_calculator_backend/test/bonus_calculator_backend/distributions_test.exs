@@ -126,7 +126,7 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     test "get_distribution_full! returns members in a stable order across edits and refetches",
          ctx do
       {:ok, _} =
-        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id})
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id}, nil)
 
       member_ids = fn full ->
         for g <- full.distribution_groups, m <- g.members, do: m.id
@@ -147,7 +147,7 @@ defmodule BonusCalculatorBackend.DistributionsTest do
 
       # Editing a member (which triggers a refetch in the UI) must not reshuffle.
       [member | _] = group.members
-      {:ok, _} = Distributions.update_member(member, %{"hours" => "10"})
+      {:ok, _} = Distributions.update_member(member, %{"hours" => "10"}, nil)
 
       assert member_ids.(Distributions.get_distribution_full!(ctx.distribution.id)) == expected
     end
