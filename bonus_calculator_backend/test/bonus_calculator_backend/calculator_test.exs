@@ -38,25 +38,37 @@ defmodule BonusCalculatorBackend.CalculatorTest do
       })
 
     {:ok, dist_a} =
-      Distributions.add_group(distribution, %{
-        "employee_group_id" => group_a.id,
-        "allocation_pct" => "40"
-      })
+      Distributions.add_group(
+        distribution,
+        %{
+          "employee_group_id" => group_a.id,
+          "allocation_pct" => "40"
+        },
+        nil
+      )
 
     {:ok, dist_b} =
-      Distributions.add_group(distribution, %{
-        "employee_group_id" => group_b.id,
-        "allocation_pct" => "60"
-      })
+      Distributions.add_group(
+        distribution,
+        %{
+          "employee_group_id" => group_b.id,
+          "allocation_pct" => "60"
+        },
+        nil
+      )
 
     set_member = fn dist_group, employee_id, hours, multiplier ->
       member = Enum.find(dist_group.members, &(&1.employee_id == employee_id))
 
       {:ok, _} =
-        Distributions.update_member(member, %{
-          "hours" => hours,
-          "performance_multiplier" => multiplier
-        })
+        Distributions.update_member(
+          member,
+          %{
+            "hours" => hours,
+            "performance_multiplier" => multiplier
+          },
+          nil
+        )
     end
 
     set_member.(dist_a, p1.id, "100", "50")
@@ -147,7 +159,7 @@ defmodule BonusCalculatorBackend.CalculatorTest do
 
   test "dividends are null when include_shareholders is false", ctx do
     {:ok, distribution} =
-      Distributions.update_distribution(ctx.distribution, %{"include_shareholders" => false})
+      Distributions.update_distribution(ctx.distribution, %{"include_shareholders" => false}, nil)
 
     distribution = Distributions.get_distribution_full!(distribution.id)
     result = Calculator.compute(distribution, People.list_shareholders())
@@ -193,19 +205,27 @@ defmodule BonusCalculatorBackend.CalculatorTest do
       })
 
     {:ok, dist_group} =
-      Distributions.add_group(distribution, %{
-        "employee_group_id" => group.id,
-        "allocation_pct" => "100"
-      })
+      Distributions.add_group(
+        distribution,
+        %{
+          "employee_group_id" => group.id,
+          "allocation_pct" => "100"
+        },
+        nil
+      )
 
     set_member = fn employee_id, hours, multiplier ->
       member = Enum.find(dist_group.members, &(&1.employee_id == employee_id))
 
       {:ok, _} =
-        Distributions.update_member(member, %{
-          "hours" => hours,
-          "performance_multiplier" => multiplier
-        })
+        Distributions.update_member(
+          member,
+          %{
+            "hours" => hours,
+            "performance_multiplier" => multiplier
+          },
+          nil
+        )
     end
 
     set_member.(e1.id, "100", "100")

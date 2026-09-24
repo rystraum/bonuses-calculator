@@ -13,6 +13,18 @@ defmodule BonusCalculatorBackendWeb.FallbackController do
     |> json(%{error: "distribution is not drafted"})
   end
 
+  def call(conn, {:error, :not_owner}) do
+    conn
+    |> put_status(:forbidden)
+    |> json(%{error: "only the distribution owner can do this"})
+  end
+
+  def call(conn, {:error, :owner_cannot_suggest}) do
+    conn
+    |> put_status(:unprocessable_entity)
+    |> json(%{error: "the distribution owner cannot submit a suggestion"})
+  end
+
   def call(conn, {:error, :invalid_transition}) do
     conn
     |> put_status(:unprocessable_entity)

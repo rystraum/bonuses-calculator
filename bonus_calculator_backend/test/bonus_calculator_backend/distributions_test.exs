@@ -1,7 +1,7 @@
 defmodule BonusCalculatorBackend.DistributionsTest do
   use BonusCalculatorBackend.DataCase, async: true
 
-  alias BonusCalculatorBackend.{Distributions, Groups, People}
+  alias BonusCalculatorBackend.{Accounts, Distributions, Groups, People}
   alias BonusCalculatorBackend.Distributions.Distribution
 
   setup do
@@ -20,6 +20,11 @@ defmodule BonusCalculatorBackend.DistributionsTest do
     %{e1: e1, e2: e2, group: group, distribution: distribution}
   end
 
+  defp create_user(username) do
+    {:ok, user} = Accounts.create_user(%{"username" => username, "password" => "secret123"})
+    user
+  end
+
   describe "planned_date" do
     test "create and update round-trip planned_date" do
       {:ok, dist} =
@@ -28,11 +33,11 @@ defmodule BonusCalculatorBackend.DistributionsTest do
       assert dist.planned_date == ~D[2026-12-15]
 
       assert {:ok, dist} =
-               Distributions.update_distribution(dist, %{"planned_date" => "2027-01-31"})
+               Distributions.update_distribution(dist, %{"planned_date" => "2027-01-31"}, nil)
 
       assert dist.planned_date == ~D[2027-01-31]
 
-      assert {:ok, dist} = Distributions.update_distribution(dist, %{"planned_date" => nil})
+      assert {:ok, dist} = Distributions.update_distribution(dist, %{"planned_date" => nil}, nil)
       assert dist.planned_date == nil
     end
 
@@ -40,17 +45,25 @@ defmodule BonusCalculatorBackend.DistributionsTest do
       {:ok, finalized} = Distributions.finalize_distribution(ctx.distribution)
 
       assert {:error, :not_drafted} =
-               Distributions.update_distribution(finalized, %{"planned_date" => "2026-12-15"})
+               Distributions.update_distribution(
+                 finalized,
+                 %{"planned_date" => "2026-12-15"},
+                 nil
+               )
     end
   end
 
   describe "snapshots" do
     test "adding a group snapshots the name and members", ctx do
       {:ok, dist_group} =
-        Distributions.add_group(ctx.distribution, %{
-          "employee_group_id" => ctx.group.id,
-          "allocation_pct" => "25"
-        })
+        Distributions.add_group(
+          ctx.distribution,
+          %{
+            "employee_group_id" => ctx.group.id,
+            "allocation_pct" => "25"
+          },
+          nil
+        )
 
       assert dist_group.name == "Engineering"
       assert Decimal.eq?(dist_group.allocation_pct, Decimal.new("25"))
@@ -68,7 +81,7 @@ defmodule BonusCalculatorBackend.DistributionsTest do
 
     test "snapshot is isolated from later changes to the source group", ctx do
       {:ok, dist_group} =
-        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id})
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id}, nil)
 
       # Mutate the source group: add a new member, remove one, rename an employee.
       {:ok, e3} = People.create_employee(%{"name" => "Carol"})
@@ -88,13 +101,16 @@ defmodule BonusCalculatorBackend.DistributionsTest do
       {:ok, _} = Groups.add_member(other_group, ctx.e1.id)
 
       {:ok, dist_a} =
-        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id})
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id}, nil)
 
       {:ok, dist_b} =
-        Distributions.add_group(ctx.distribution, %{"employee_group_id" => other_group.id})
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => other_group.id}, nil)
 
       {:ok, _} =
-        Distributions.delete_distribution_group(Distributions.get_distribution_group!(dist_a.id))
+        Distributions.delete_distribution_group(
+          Distributions.get_distribution_group!(dist_a.id),
+          nil
+        )
 
       reloaded_b = Distributions.get_distribution_group!(dist_b.id)
 
@@ -153,42 +169,366 @@ defmodule BonusCalculatorBackend.DistributionsTest do
 
     test "mutations are blocked once the distribution is not drafted", ctx do
       {:ok, dist_group} =
-        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id})
+        Distributions.add_group(ctx.distribution, %{"employee_group_id" => ctx.group.id}, nil)
 
       {:ok, bonus} =
-        Distributions.add_special_bonus(ctx.distribution, %{
-          "employee_id" => ctx.e1.id,
-          "amount" => "500"
-        })
+        Distributions.add_special_bonus(
+          ctx.distribution,
+          %{
+            "employee_id" => ctx.e1.id,
+            "amount" => "500"
+          },
+          nil
+        )
 
       {:ok, finalized} = Distributions.finalize_distribution(ctx.distribution)
 
       assert {:error, :not_drafted} =
-               Distributions.update_distribution(finalized, %{"name" => "New name"})
+               Distributions.update_distribution(finalized, %{"name" => "New name"}, nil)
 
-      assert {:error, :not_drafted} = Distributions.delete_distribution(finalized)
+      assert {:error, :not_drafted} = Distributions.delete_distribution(finalized, nil)
 
       assert {:error, :not_drafted} =
-               Distributions.add_group(finalized, %{"employee_group_id" => ctx.group.id})
+               Distributions.add_group(finalized, %{"employee_group_id" => ctx.group.id}, nil)
 
       dist_group = Distributions.get_distribution_group!(dist_group.id)
 
       assert {:error, :not_drafted} =
-               Distributions.update_distribution_group(dist_group, %{"allocation_pct" => "10"})
+               Distributions.update_distribution_group(
+                 dist_group,
+                 %{"allocation_pct" => "10"},
+                 nil
+               )
 
-      assert {:error, :not_drafted} = Distributions.delete_distribution_group(dist_group)
+      assert {:error, :not_drafted} = Distributions.delete_distribution_group(dist_group, nil)
 
       member = Distributions.get_member!(hd(dist_group.members).id)
-      assert {:error, :not_drafted} = Distributions.update_member(member, %{"hours" => "10"})
+
+      assert {:error, :not_drafted} = Distributions.update_member(member, %{"hours" => "10"}, nil)
 
       assert {:error, :not_drafted} =
-               Distributions.add_special_bonus(finalized, %{
-                 "employee_id" => ctx.e1.id,
-                 "amount" => "1"
-               })
+               Distributions.add_special_bonus(
+                 finalized,
+                 %{
+                   "employee_id" => ctx.e1.id,
+                   "amount" => "1"
+                 },
+                 nil
+               )
 
       bonus = Distributions.get_special_bonus!(bonus.id)
-      assert {:error, :not_drafted} = Distributions.delete_special_bonus(bonus)
+      assert {:error, :not_drafted} = Distributions.delete_special_bonus(bonus, nil)
+    end
+  end
+
+  describe "ownership" do
+    setup ctx do
+      owner = create_user("owner")
+      other = create_user("other")
+
+      {:ok, distribution} =
+        Distributions.create_distribution(
+          %{"name" => "Owned draft", "bonus_budget" => "10000"},
+          owner
+        )
+
+      {:ok, dist_group} =
+        Distributions.add_group(
+          distribution,
+          %{"employee_group_id" => ctx.group.id, "allocation_pct" => "100"},
+          owner
+        )
+
+      {:ok, bonus} =
+        Distributions.add_special_bonus(
+          distribution,
+          %{"employee_id" => ctx.e1.id, "amount" => "500"},
+          owner
+        )
+
+      %{
+        owner: owner,
+        other: other,
+        owned: distribution,
+        owned_group: dist_group,
+        owned_bonus: bonus
+      }
+    end
+
+    test "non-owner cannot mutate an owned draft", ctx do
+      assert {:error, :not_owner} =
+               Distributions.update_distribution(ctx.owned, %{"name" => "Nope"}, ctx.other)
+
+      assert {:error, :not_owner} = Distributions.delete_distribution(ctx.owned, ctx.other)
+
+      assert {:error, :not_owner} =
+               Distributions.add_group(
+                 ctx.owned,
+                 %{"employee_group_id" => ctx.group.id},
+                 ctx.other
+               )
+
+      dist_group = Distributions.get_distribution_group!(ctx.owned_group.id)
+
+      assert {:error, :not_owner} =
+               Distributions.update_distribution_group(
+                 dist_group,
+                 %{"allocation_pct" => "10"},
+                 ctx.other
+               )
+
+      assert {:error, :not_owner} =
+               Distributions.delete_distribution_group(dist_group, ctx.other)
+
+      member = Distributions.get_member!(hd(dist_group.members).id)
+
+      assert {:error, :not_owner} =
+               Distributions.update_member(member, %{"hours" => "10"}, ctx.other)
+
+      assert {:error, :not_owner} =
+               Distributions.add_special_bonus(
+                 ctx.owned,
+                 %{"employee_id" => ctx.e1.id, "amount" => "1"},
+                 ctx.other
+               )
+
+      bonus = Distributions.get_special_bonus!(ctx.owned_bonus.id)
+
+      assert {:error, :not_owner} = Distributions.delete_special_bonus(bonus, ctx.other)
+
+      assert {:error, :not_owner} = Distributions.finalize_distribution(ctx.owned, ctx.other)
+    end
+
+    test "owner can mutate their own draft", ctx do
+      assert {:ok, updated} =
+               Distributions.update_distribution(ctx.owned, %{"name" => "Mine"}, ctx.owner)
+
+      assert updated.name == "Mine"
+
+      assert {:ok, finalized} = Distributions.finalize_distribution(ctx.owned, ctx.owner)
+      assert finalized.status == "finalized"
+    end
+
+    test "non-owner cannot mark an owned finalized distribution paid", ctx do
+      {:ok, finalized} = Distributions.finalize_distribution(ctx.owned, ctx.owner)
+
+      assert {:error, :not_owner} = Distributions.mark_paid_distribution(finalized, ctx.other)
+      assert {:ok, paid} = Distributions.mark_paid_distribution(finalized, ctx.owner)
+      assert paid.status == "paid_out"
+    end
+
+    test "legacy nil-owner distributions stay editable by anyone", ctx do
+      assert {:ok, updated} =
+               Distributions.update_distribution(
+                 ctx.distribution,
+                 %{"name" => "Renamed"},
+                 ctx.other
+               )
+
+      assert updated.name == "Renamed"
+
+      assert {:ok, finalized} = Distributions.finalize_distribution(ctx.distribution, ctx.other)
+      assert finalized.status == "finalized"
+    end
+  end
+
+  describe "suggestions" do
+    setup ctx do
+      owner = create_user("suggestion-owner")
+      suggester = create_user("suggester")
+
+      {:ok, distribution} =
+        Distributions.create_distribution(
+          %{
+            "name" => "Suggestable",
+            "bonus_budget" => "10000",
+            "effort_weight" => 50,
+            "impact_weight" => 50,
+            "rounding_step" => 10
+          },
+          owner
+        )
+
+      {:ok, dist_group} =
+        Distributions.add_group(
+          distribution,
+          %{"employee_group_id" => ctx.group.id, "allocation_pct" => "100"},
+          owner
+        )
+
+      for member <- dist_group.members do
+        {:ok, _} =
+          Distributions.update_member(
+            member,
+            %{"hours" => "100", "performance_multiplier" => "100"},
+            owner
+          )
+      end
+
+      %{owner: owner, suggester: suggester, dist: distribution, dist_group: dist_group}
+    end
+
+    test "upsert creates then replaces the user's set", ctx do
+      {:ok, first} =
+        Distributions.upsert_suggestion(ctx.dist, ctx.suggester, %{
+          "explanation" => "v1",
+          "changes" => %{"distribution" => %{"bonus_budget" => "20000"}}
+        })
+
+      assert first.explanation == "v1"
+      assert first.changes == %{"distribution" => %{"bonus_budget" => "20000"}}
+      assert first.user.id == ctx.suggester.id
+
+      {:ok, second} =
+        Distributions.upsert_suggestion(ctx.dist, ctx.suggester, %{
+          "explanation" => "v2",
+          "changes" => %{"distribution" => %{"bonus_budget" => "30000"}}
+        })
+
+      assert second.id == first.id
+      assert second.explanation == "v2"
+      assert second.changes == %{"distribution" => %{"bonus_budget" => "30000"}}
+
+      assert [suggestion] = Distributions.list_suggestions(ctx.dist)
+      assert suggestion.id == first.id
+    end
+
+    test "the owner cannot suggest on their own distribution", ctx do
+      assert {:error, :owner_cannot_suggest} =
+               Distributions.upsert_suggestion(ctx.dist, ctx.owner, %{
+                 "explanation" => "self",
+                 "changes" => %{}
+               })
+    end
+
+    test "suggestions require a drafted distribution", ctx do
+      {:ok, finalized} = Distributions.finalize_distribution(ctx.dist, ctx.owner)
+
+      assert {:error, :not_drafted} =
+               Distributions.upsert_suggestion(finalized, ctx.suggester, %{
+                 "explanation" => "too late",
+                 "changes" => %{}
+               })
+    end
+
+    test "only the author can delete a suggestion", ctx do
+      {:ok, suggestion} =
+        Distributions.upsert_suggestion(ctx.dist, ctx.suggester, %{
+          "explanation" => "mine",
+          "changes" => %{}
+        })
+
+      assert {:error, :not_owner} = Distributions.delete_suggestion(suggestion, ctx.owner)
+      assert {:ok, _} = Distributions.delete_suggestion(suggestion, ctx.suggester)
+      assert Distributions.list_suggestions(ctx.dist) == []
+    end
+
+    test "list_suggestions returns sets newest first", ctx do
+      other = create_user("other-suggester")
+
+      {:ok, first} =
+        Distributions.upsert_suggestion(ctx.dist, ctx.suggester, %{
+          "explanation" => "first",
+          "changes" => %{}
+        })
+
+      {:ok, second} =
+        Distributions.upsert_suggestion(ctx.dist, other, %{
+          "explanation" => "second",
+          "changes" => %{}
+        })
+
+      # inserted_at has second precision; backdate the first row so ordering is
+      # deterministic.
+      first
+      |> Ecto.Changeset.change(inserted_at: ~U[2026-01-01 00:00:00Z])
+      |> Repo.update!()
+
+      assert [%{id: second_id}, %{id: first_id}] = Distributions.list_suggestions(ctx.dist)
+      assert second_id == second.id
+      assert first_id == first.id
+    end
+
+    test "simulate/2 overlays distribution and member changes on the computation", ctx do
+      full = Distributions.get_distribution_full!(ctx.dist.id)
+      base = Distributions.simulate(full, %{})
+
+      [base_group] = base.groups
+      assert base_group.group_budget == "10000"
+      # 5,000 impact / 200 multiplier = 25; 5,000 effort / 200 hours = 25
+      assert Enum.all?(base_group.members, &(&1.total == "5000"))
+
+      member1 = hd(ctx.dist_group.members)
+
+      changes = %{
+        "distribution" => %{"bonus_budget" => "20000"},
+        "members" => %{member1.id => %{"hours" => "50", "performance_multiplier" => "50"}}
+      }
+
+      [sim_group] = Distributions.simulate(full, changes).groups
+      assert sim_group.group_budget == "20000"
+
+      # 10,000 / 150 = 66.66..., floored to step 10 -> 60 per impact/hour
+      members = Map.new(sim_group.members, &{&1.id, &1})
+      assert members[member1.id].total == "6000"
+
+      [member2] = ctx.dist_group.members -- [member1]
+      assert members[member2.id].total == "12000"
+    end
+
+    test "simulate/2 keeps historical amount overrides when not targeted", ctx do
+      overridden = Enum.find(ctx.dist_group.members, &(&1.employee_id == ctx.e1.id))
+      computed = Enum.find(ctx.dist_group.members, &(&1.employee_id == ctx.e2.id))
+
+      overridden
+      |> Ecto.Changeset.change(
+        impact_amount: Decimal.new("3333.33"),
+        effort_amount: Decimal.new("3333.33")
+      )
+      |> Repo.update!()
+
+      full = Distributions.get_distribution_full!(ctx.dist.id)
+
+      changes = %{
+        "distribution" => %{"bonus_budget" => "20000"},
+        "members" => %{computed.id => %{"hours" => "200"}}
+      }
+
+      [sim_group] = Distributions.simulate(full, changes).groups
+      members = Map.new(sim_group.members, &{&1.id, &1})
+
+      # The overridden member keeps its sheet-exact amounts...
+      assert members[overridden.id].impact_amount == "3333.33"
+      assert members[overridden.id].effort_amount == "3333.33"
+
+      # ...while the targeted member is recomputed: 10,000 / 200 = 50 exactly
+      # per impact; 10,000 / 300 hours = 33.33..., floored to 30 per hour
+      assert members[computed.id].impact_amount == "5000"
+      assert members[computed.id].effort_amount == "6000"
+    end
+
+    test "simulate/2 appends suggested special bonuses", ctx do
+      full = Distributions.get_distribution_full!(ctx.dist.id)
+
+      changes = %{
+        "special_bonuses" => [
+          %{"employee_id" => ctx.e1.id, "amount" => "1500", "note" => "retention"},
+          %{"employee_id" => nil, "name" => "Contractor", "amount" => "500"}
+        ]
+      }
+
+      result = Distributions.simulate(full, changes)
+
+      assert result.totals.special_bonuses_total == "2000"
+
+      bonuses = Enum.sort_by(result.special_bonuses, &Decimal.new(&1.amount), Decimal)
+
+      assert [
+               %{employee_id: nil, employee_name: nil, name: "Contractor", amount: "500"},
+               %{employee_id: e1_id, employee_name: "Alice", amount: "1500"}
+             ] = Enum.map(bonuses, &Map.take(&1, [:employee_id, :employee_name, :name, :amount]))
+
+      assert e1_id == ctx.e1.id
     end
   end
 
