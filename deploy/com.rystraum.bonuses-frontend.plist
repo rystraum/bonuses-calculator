@@ -5,17 +5,14 @@
 	<key>Label</key>
 	<string>com.rystraum.bonuses-frontend</string>
 
-	<key>UserName</key>
-	<string>rystraum</string>
-
 	<key>ProgramArguments</key>
 	<array>
-		<string>/bin/bash</string>
+		<string>/Users/rystraum/bin/launchd-bash</string>
 		<string>/Volumes/Code/personal/bonuses-calculator/deploy/bonuses-frontend.start.sh</string>
 	</array>
 
 	<key>WorkingDirectory</key>
-	<string>/Volumes/Code/personal/bonuses-calculator/bonus_calculator_frontend</string>
+	<string>/Users/rystraum</string>
 
 	<key>EnvironmentVariables</key>
 	<dict>
