@@ -1,8 +1,10 @@
 defmodule BonusCalculatorBackend.DistributionsTest do
   use BonusCalculatorBackend.DataCase, async: true
 
-  alias BonusCalculatorBackend.{Accounts, Distributions, Groups, People}
-  alias BonusCalculatorBackend.Distributions.Distribution
+  import Ecto.Query
+
+  alias BonusCalculatorBackend.{Accounts, Distributions, Groups, People, Repo}
+  alias BonusCalculatorBackend.Distributions.{Distribution, DistributionShareholder}
 
   setup do
     build_fixture()
@@ -154,6 +156,34 @@ defmodule BonusCalculatorBackend.DistributionsTest do
   end
 
   describe "status transitions and drafted guard" do
+    test "finalize replaces pre-existing shareholder snapshot rows", ctx do
+      {:ok, s1} = People.create_shareholder(%{"name" => "Rye", "shares" => "100"})
+      {:ok, s2} = People.create_shareholder(%{"name" => "Liz", "shares" => "50"})
+
+      # Simulate the seed import: an imported draft already carries
+      # distribution_shareholders rows.
+      for {shareholder, shares} <- [{s1, 100}, {s2, 50}] do
+        %DistributionShareholder{}
+        |> DistributionShareholder.changeset(%{
+          distribution_id: ctx.distribution.id,
+          shareholder_id: shareholder.id,
+          name: shareholder.name,
+          shares: shares
+        })
+        |> Repo.insert!()
+      end
+
+      {:ok, _} = Distributions.finalize_distribution(ctx.distribution)
+
+      rows =
+        Repo.all(
+          from ds in DistributionShareholder,
+            where: ds.distribution_id == ^ctx.distribution.id
+        )
+
+      assert Enum.map(rows, & &1.name) |> Enum.sort() == ["Liz", "Rye"]
+    end
+
     test "finalize then mark_paid; invalid transitions rejected", ctx do
       assert {:error, :invalid_transition} =
                Distributions.mark_paid_distribution(ctx.distribution)

@@ -140,7 +140,12 @@ defmodule BonusCalculatorBackend.Distributions do
 
   # Freezes the current shareholders table into snapshot rows so later
   # share-count changes cannot rewrite a finalized distribution's dividends.
+  # Any pre-existing rows (e.g. written by the seed import for a draft) are
+  # replaced — appending would double the dividend split.
   defp snapshot_shareholders(distribution) do
+    from(ds in DistributionShareholder, where: ds.distribution_id == ^distribution.id)
+    |> Repo.delete_all()
+
     for shareholder <- People.list_shareholders() do
       %DistributionShareholder{}
       |> DistributionShareholder.changeset(%{
