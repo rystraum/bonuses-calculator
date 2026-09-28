@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, CheckCheck, Lock, Plus, Share2, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Eye, Lock, PenLine, Plus, Share2, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { fmtDateTime, peso, pct, EMPTY_RESULT, type DistGroup, type Distribution } from '@/lib/model'
 import { useStore } from '@/lib/store'
@@ -130,7 +130,7 @@ function DetailContent({ dist }: { dist: Distribution }) {
         <div className="space-y-10">
           <SuggestionsSection dist={dist} onView={setViewSuggestionId} />
           {isOwner
-            ? <DraftEditor dist={dist} onViewSuggestion={setViewSuggestionId} />
+            ? <OwnerDraftSections dist={dist} onViewSuggestion={setViewSuggestionId} />
             : <SuggestionEditor dist={dist} state={suggestionState} />}
           {isOwner && <ParticipationSection dist={dist} />}
         </div>
@@ -216,6 +216,43 @@ function HandoffButton({ dist }: { dist: Distribution }) {
     <Button variant="outline" onClick={() => navigate(`/distributions/${dist.id}/handoff`)}>
       <Share2 className="mr-1.5 h-4 w-4" /> Handoff view
     </Button>
+  )
+}
+
+// ─── owner draft: mobile view/edit toggle ─────────────────────────────────────
+
+/**
+ * Owner's draft workspace. Desktop always shows the editor; mobile gets a
+ * View/Edit segmented toggle — View renders the same read-only summary used
+ * for finalized distributions (with the live computation), Edit is the draft
+ * editor.
+ */
+function OwnerDraftSections({ dist, onViewSuggestion }: { dist: Distribution; onViewSuggestion: (suggestionId: string) => void }) {
+  const store = useStore()
+  const [edit, setEdit] = useState(false)
+  const view: Distribution = { ...dist, result: store.computations[dist.id] ?? EMPTY_RESULT }
+
+  return (
+    <div className="space-y-4 md:space-y-10">
+      <div className="flex gap-1 rounded-lg border bg-muted/40 p-1 md:hidden">
+        <button type="button" onClick={() => setEdit(false)}
+          className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition-colors',
+            !edit ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+          <Eye className="h-3.5 w-3.5" /> View
+        </button>
+        <button type="button" onClick={() => setEdit(true)}
+          className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition-colors',
+            edit ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+          <PenLine className="h-3.5 w-3.5" /> Edit
+        </button>
+      </div>
+      <div className={cn(!edit && 'hidden md:block')}>
+        <DraftEditor dist={dist} onViewSuggestion={onViewSuggestion} />
+      </div>
+      <div className={cn(edit && 'hidden md:block')}>
+        <SummaryView dist={view} />
+      </div>
+    </div>
   )
 }
 
