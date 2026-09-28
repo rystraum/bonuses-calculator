@@ -12,34 +12,80 @@ export default function SummaryView({ dist }: { dist: Distribution }) {
 
   useEffect(() => {
     store.loadApprovals(dist.id).catch(() => {})
+    // db.users is only populated after visiting the Users admin page — load it
+    // here too so non-approvers still show up as "Not approved".
+    store.loadUsers().catch(() => {})
   }, [store, dist.id])
 
   const approvals = store.approvals[dist.id] ?? []
+  const approvalByUser = new Map(approvals.map((a) => [a.user.id, a]))
+  // The owner can't approve their own draft; everyone else is listed either way.
+  // Union with approval users in case /users is unavailable or still loading.
+  const reviewers = [
+    ...store.db.users.map((u) => ({ id: u.id, username: u.username })),
+    ...approvals.map((a) => a.user).filter((au) => !store.db.users.some((u) => u.id === au.id)),
+  ].filter((u) => u.id !== dist.createdBy?.id)
   if (!r) return null
 
   return (
     <div className="space-y-10">
-      {/* approvals collected while this was a draft */}
-      {approvals.length > 0 && (
-        <section>
-          <SectionHeader title="Approvals" hint="Sign-offs collected while this distribution was a draft" />
-          <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
-            <table className="ledger">
-              <thead>
-                <tr><th>User</th><th>Approved</th></tr>
-              </thead>
-              <tbody>
-                {approvals.map((a) => (
-                  <tr key={a.id}>
-                    <td className="font-medium">{a.user.username}</td>
-                    <td className="text-muted-foreground">{fmtDateTime(a.approvedAt)}</td>
+      {/* approvals collected while this was a draft — every reviewer is listed, approved or not */}
+      <section>
+        <SectionHeader title="Approvals" hint="Sign-offs collected while this distribution was a draft" >
+          <span className="num text-sm font-semibold">
+            {approvals.length} of {reviewers.length} approved
+          </span>
+        </SectionHeader>
+
+        {/* mobile: cards */}
+        <div className="space-y-2 md:hidden">
+          {reviewers.map((u) => {
+            const a = approvalByUser.get(u.id)
+            return (
+              <article key={u.id} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-4 shadow-xs">
+                <span className="font-medium">{u.username}</span>
+                {a ? (
+                  <span className="inline-flex items-center gap-2">
+                    <img src={a.selfie} alt={`${u.username}'s approval selfie`} className="h-8 w-8 rounded-full object-cover" />
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">{fmtDateTime(a.approvedAt)}</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Not approved</span>
+                )}
+              </article>
+            )
+          })}
+        </div>
+
+        {/* desktop: table */}
+        <div className="hidden overflow-x-auto rounded-lg border bg-card shadow-xs md:block">
+          <table className="ledger">
+            <thead>
+              <tr><th>User</th><th className="r">Approved</th></tr>
+            </thead>
+            <tbody>
+              {reviewers.map((u) => {
+                const a = approvalByUser.get(u.id)
+                return (
+                  <tr key={u.id}>
+                    <td className="font-medium">{u.username}</td>
+                    <td className="r">
+                      {a ? (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <img src={a.selfie} alt={`${u.username}'s approval selfie`} className="h-8 w-8 rounded-full object-cover" />
+                          <span className="whitespace-nowrap text-muted-foreground">{fmtDateTime(a.approvedAt)}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Not approved</span>
+                      )}
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
       {/* dividends */}
       {dist.includeShareholders && (
         <section>
