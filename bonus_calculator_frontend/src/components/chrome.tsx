@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, Navigate, useLocation, useNavigate } from 'react-router'
 import {
-  Banknote, Coins, GitCompareArrows, LogOut, Settings2, Upload, UserRound, UserRoundPlus, UsersRound, Wallet,
+  Banknote, Coins, GitCompareArrows, LogOut, Menu, Settings2, Upload, UserRound, UserRoundPlus, UsersRound, Wallet, X,
 } from 'lucide-react'
 import { peso, type DistributionStatus } from '@/lib/model'
 import { useStore } from '@/lib/store'
@@ -153,7 +153,18 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
   const { db, sessionUserId, logout } = useStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const user = db.users.find((u) => u.id === sessionUserId)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // close the slideout on navigation, and on Escape while open
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   return (
     <div className="flex min-h-screen">
@@ -214,27 +225,86 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* mobile top bar */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-background/90 px-4 py-2.5 backdrop-blur md:hidden">
-          <span className="font-display text-sm font-semibold">Bonus & Dividend Calculator</span>
-          <nav className="flex gap-1">
-            {NAV.map(({ to, label }) => (
-              <NavLink key={to} to={to} end={to === '/'}
-                className={({ isActive }) =>
-                  cn('rounded-md px-2 py-1 text-xs font-medium', isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')
-                }>
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-          <span className="flex items-center gap-1">
-            <button onClick={() => navigate('/settings')} title="Settings"
-              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <Settings2 className="h-4 w-4" />
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button onClick={() => setMenuOpen(true)} title="Menu"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+              <Menu className="h-5 w-5" />
             </button>
-            <button onClick={() => { logout(); navigate('/login') }} title="Sign out"
-              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </span>
+            <span className="truncate font-display text-sm font-semibold">Bonus &amp; Dividend Calculator</span>
+          </div>
+          <button onClick={() => { logout(); navigate('/login') }} title="Sign out"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* mobile slideout menu */}
+        <div className={cn('fixed inset-0 z-30 md:hidden', !menuOpen && 'pointer-events-none')}>
+          <div aria-hidden
+            className={cn('absolute inset-0 bg-black/40 transition-opacity duration-200',
+              menuOpen ? 'opacity-100' : 'opacity-0')}
+            onClick={() => setMenuOpen(false)} />
+          <div className={cn('absolute inset-y-0 left-0 flex w-64 flex-col border-r bg-background px-3 py-5 shadow-xl transition-transform duration-200',
+            menuOpen ? 'translate-x-0' : '-translate-x-full')}>
+            <div className="mb-8 flex items-center justify-between px-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <Wallet className="h-4 w-4" />
+                </div>
+                <div className="leading-tight">
+                  <div className="font-display text-sm font-semibold">Bonus &amp; Dividend</div>
+                  <div className="text-[0.6875rem] uppercase tracking-[0.14em] text-muted-foreground">Calculator</div>
+                </div>
+              </div>
+              <button onClick={() => setMenuOpen(false)} title="Close menu"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <nav className="flex flex-col gap-0.5">
+              {NAV.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
+                      isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    )
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="mt-auto space-y-2 border-t pt-3">
+              <div className="flex items-center gap-2 px-2.5">
+                <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="truncate text-sm font-medium" title={user?.name}>{user?.name}</span>
+              </div>
+              <div className="flex gap-1.5 px-1.5 pb-0.5">
+                <button
+                  onClick={() => { setMenuOpen(false); navigate('/settings') }}
+                  title="Settings"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Settings
+                </button>
+                <button
+                  onClick={() => { logout(); navigate('/login') }}
+                  title="Sign out"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8 lg:px-10">{children}</main>
       </div>
