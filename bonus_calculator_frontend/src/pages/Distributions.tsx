@@ -48,6 +48,19 @@ export default function Distributions() {
     else yearGroups.push({ year, items: [d] })
   }
 
+  const groupTotals = (items: typeof sorted) => ({
+    bonus: items.reduce((s, d) => s + (d.result ? d.result.bonusPaidOut : d.bonusBudget), 0),
+    dividends: items.reduce((s, d) => s + (d.result ? d.result.dividendPaidOut : d.includeShareholders ? d.dividendBudget : 0), 0),
+    grand: items.reduce((s, d) => s + (d.result ? d.result.grandTotal : d.bonusBudget + (d.includeShareholders ? d.dividendBudget : 0)), 0),
+  })
+
+  const actionLabel = (d: (typeof sorted)[number]) =>
+    d.status !== 'drafted'
+      ? 'View'
+      : d.createdBy != null && d.createdBy.id !== sessionUserId
+        ? 'Review'
+        : 'Edit'
+
   return (
     <AppShell>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -95,7 +108,89 @@ export default function Distributions() {
         </Dialog>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+      {/* Mobile: cards (ledger table doesn't fit small screens) */}
+      <div className="space-y-4 md:hidden">
+        {yearGroups.map((g) => {
+          const { grand: grandTotal } = groupTotals(g.items)
+          return (
+            <section key={g.year}>
+              <div className="flex items-baseline justify-between px-1 pb-1.5">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{g.year}</p>
+                <p className="num text-xs font-semibold text-muted-foreground">{peso(grandTotal)}</p>
+              </div>
+              <div className="space-y-2">
+                {g.items.map((d) => (
+                  <article key={d.id} className="rounded-lg border bg-card p-4 shadow-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <Link to={`/distributions/${d.id}`} className="group min-w-0">
+                        <span className="block truncate font-medium text-foreground underline-offset-4 group-hover:underline">{d.name}</span>
+                        {d.description && <span className="mt-0.5 block text-xs text-muted-foreground">{d.description}</span>}
+                        <span className="mt-1 block text-[0.6875rem] text-muted-foreground">
+                          {d.createdBy ? `${d.createdBy.username} · ` : ''}created {d.createdAt}
+                          {d.plannedDate ? ` · planned ${fmtDate(d.plannedDate)}` : ''}
+                        </span>
+                      </Link>
+                      <StatusBadge status={d.status} />
+                    </div>
+                    <dl className="mt-3 space-y-1 border-t pt-3 text-sm">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt className="text-muted-foreground">Bonus</dt>
+                        <dd className="num"><Money value={d.result ? d.result.bonusPaidOut : d.bonusBudget} /></dd>
+                      </div>
+                      {d.includeShareholders && (
+                        <div className="flex items-baseline justify-between gap-3">
+                          <dt className="text-muted-foreground">Dividends</dt>
+                          <dd className="num"><Money value={d.result ? d.result.dividendPaidOut : d.dividendBudget} /></dd>
+                        </div>
+                      )}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <dt className="text-muted-foreground">Grand total</dt>
+                        <dd className="num font-semibold">
+                          {d.result ? (
+                            <Money value={d.result.grandTotal} />
+                          ) : (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              {peso(d.bonusBudget + (d.includeShareholders ? d.dividendBudget : 0))} planned
+                            </span>
+                          )}
+                        </dd>
+                      </div>
+                      {d.finalizedAt && (
+                        <div className="pt-1 text-[0.6875rem] text-muted-foreground">
+                          {d.status === 'paid_out' && d.paidOutAt
+                            ? `Paid out ${fmtDate(d.paidOutAt)}`
+                            : `Finalized ${fmtDate(d.finalizedAt)}`}
+                        </div>
+                      )}
+                    </dl>
+                    <div className="mt-3 flex items-center justify-end gap-1 border-t pt-3">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link to={`/distributions/${d.id}`}>
+                          {actionLabel(d)} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      {d.status === 'drafted' && (d.createdBy == null || d.createdBy.id === sessionUserId) && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteDistribution(d.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )
+        })}
+        {db.distributions.length === 0 && (
+          <p className="rounded-lg border bg-card py-10 text-center text-sm text-muted-foreground">
+            No distributions yet — create one to get started.
+          </p>
+        )}
+      </div>
+
+      {/* Desktop: ledger table */}
+      <div className="hidden overflow-x-auto rounded-lg border bg-card shadow-xs md:block">
         <table className="ledger">
           <thead>
             <tr>
@@ -103,7 +198,7 @@ export default function Distributions() {
               <th>Created by</th>
               <th>Planned</th>
               <th>Status</th>
-              <th className="r">Bonus budget</th>
+              <th className="r">Bonus</th>
               <th className="r">Dividends</th>
               <th className="r">Grand total</th>
               <th className="r" />
@@ -111,9 +206,7 @@ export default function Distributions() {
           </thead>
           <tbody>
             {yearGroups.map((g) => {
-              const bonusTotal = g.items.reduce((s, d) => s + d.bonusBudget, 0)
-              const dividendTotal = g.items.reduce((s, d) => s + (d.includeShareholders ? d.dividendBudget : 0), 0)
-              const grandTotal = g.items.reduce((s, d) => s + (d.result ? d.result.grandTotal : d.bonusBudget + (d.includeShareholders ? d.dividendBudget : 0)), 0)
+              const { bonus: bonusTotal, dividends: dividendTotal, grand: grandTotal } = groupTotals(g.items)
               return (
               <Fragment key={g.year}>
                 <tr className="bg-muted/50">
@@ -146,9 +239,9 @@ export default function Distributions() {
                   )}
                 </td>
                 <td><StatusBadge status={d.status} /></td>
-                <td className="r"><Money value={d.bonusBudget} /></td>
+                <td className="r"><Money value={d.result ? d.result.bonusPaidOut : d.bonusBudget} /></td>
                 <td className="r">
-                  {d.includeShareholders ? <Money value={d.dividendBudget} /> : <span className="text-muted-foreground">—</span>}
+                  {d.includeShareholders ? <Money value={d.result ? d.result.dividendPaidOut : d.dividendBudget} /> : <span className="text-muted-foreground">—</span>}
                 </td>
                 <td className="r">
                   {d.result ? (
@@ -163,11 +256,7 @@ export default function Distributions() {
                   <div className="flex items-center justify-end gap-1">
                     <Button variant="ghost" size="sm" asChild>
                       <Link to={`/distributions/${d.id}`}>
-                        {d.status !== 'drafted'
-                          ? 'View'
-                          : d.createdBy != null && d.createdBy.id !== sessionUserId
-                            ? 'Review'
-                            : 'Edit'}{' '}
+                        {actionLabel(d)}{' '}
                         <ArrowRight className="ml-1 h-3.5 w-3.5" />
                       </Link>
                     </Button>
