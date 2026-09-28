@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, CheckCircle2, Eye, Lightbulb, RotateCcw, Undo2, type LucideIcon } from 'lucide-react'
-import { fmtDateTime, type Distribution } from '@/lib/model'
+import { fmtDateTime, type Distribution, type Participation } from '@/lib/model'
 import { useStore } from '@/lib/store'
 import { SectionHeader } from '@/components/chrome'
 import {
@@ -197,37 +197,65 @@ export function ParticipationSection({ dist }: { dist: Distribution }) {
           No other users can participate in this draft yet.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
-          <table className="ledger">
-            <thead>
-              <tr><th>User</th><th>Seen</th><th>Suggestion</th><th>Approval</th></tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.user.id}>
-                  <td className="font-medium">{p.user.username}</td>
-                  <td><Indicator icon={Eye} at={p.seenAt} /></td>
-                  <td><Indicator icon={Lightbulb} at={p.suggestedAt} /></td>
-                  <td>
-                    {p.approval ? (
-                      <span className="inline-flex items-center gap-2">
-                        <img src={p.approval.selfie} alt={`${p.user.username}'s approval selfie`}
-                          className="h-8 w-8 rounded-full object-cover" />
-                        <span className="whitespace-nowrap text-xs text-muted-foreground">
-                          {fmtDateTime(p.approval.approvedAt)}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* mobile: cards */}
+          <div className="space-y-2 md:hidden">
+            {rows.map((p) => (
+              <article key={p.user.id} className="rounded-lg border bg-card p-4 shadow-xs">
+                <p className="font-medium">{p.user.username}</p>
+                <dl className="mt-2 space-y-1.5 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Seen</dt>
+                    <dd><Indicator icon={Eye} at={p.seenAt} /></dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Suggestion</dt>
+                    <dd><Indicator icon={Lightbulb} at={p.suggestedAt} /></dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Approval</dt>
+                    <dd><ApprovalCell approval={p.approval} username={p.user.username} /></dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+
+          {/* desktop: table */}
+          <div className="hidden overflow-x-auto rounded-lg border bg-card shadow-xs md:block">
+            <table className="ledger">
+              <thead>
+                <tr><th>User</th><th>Seen</th><th>Suggestion</th><th>Approval</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr key={p.user.id}>
+                    <td className="font-medium">{p.user.username}</td>
+                    <td><Indicator icon={Eye} at={p.seenAt} /></td>
+                    <td><Indicator icon={Lightbulb} at={p.suggestedAt} /></td>
+                    <td><ApprovalCell approval={p.approval} username={p.user.username} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
+  )
+}
+
+/** Approval selfie + timestamp, or a muted dash when not approved yet. */
+function ApprovalCell({ approval, username }: { approval: Participation['approval']; username: string }) {
+  if (!approval) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className="inline-flex items-center gap-2">
+      <img src={approval.selfie} alt={`${username}'s approval selfie`}
+        className="h-8 w-8 rounded-full object-cover" />
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        {fmtDateTime(approval.approvedAt)}
+      </span>
+    </span>
   )
 }
 
